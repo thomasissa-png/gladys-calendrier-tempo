@@ -1,0 +1,10 @@
+{
+  "status": "ok",
+  "remaining": { "ROUGE": 22, "BLANC": 43, "BLEU": 255 },
+  "totals": { "ROUGE": 22, "BLANC": 43, "BLEU": 300 },
+  "actuals_in_db": 45,
+  "days_left_in_season": 321,
+  "season_start": "2026-09-01",
+  "season_end": "2027-08-31",
+  "edf_official": { "ROUGE": 22, "BLANC": 43, "BLEU": 255 }
+}

@@ -1,0 +1,156 @@
+{
+  "manifest_version": 1,
+  "type": "device",
+  "name": "Calendrier Tempo EDF",
+  "description": {
+    "en": "EDF Tempo colors, forecasts up to 15 days, days left, widget and scene triggers.",
+    "fr": "Couleurs Tempo EDF, prévisions jusqu'à 15 jours, jours restants, widget et scènes."
+  },
+  "version": "0.1.0",
+  "docker_image": "ghcr.io/thomasissa-png/gladys-calendrier-tempo:0.1.0",
+  "gladys_version": ">=5.1.0",
+  "cover_image": "https://raw.githubusercontent.com/thomasissa-png/gladys-calendrier-tempo/main/cover.png",
+  "categories": ["energy"],
+  "config_schema": [
+    {
+      "key": "intro",
+      "type": "section",
+      "label": { "en": "How it works", "fr": "Fonctionnement" },
+      "description": {
+        "en": "Data comes from the free public API of calendrier-tempo.fr: no account, no key. Create the \"Calendrier Tempo EDF\" device from the Discovery tab. Only the color published by EDF is official; forecasts are a guide.",
+        "fr": "Les données viennent de l'API publique et gratuite de calendrier-tempo.fr : aucun compte, aucune clé. Créez l'appareil « Calendrier Tempo EDF » depuis l'onglet Découverte. Seule la couleur publiée par EDF fait foi, les prévisions sont un repère."
+      },
+      "links": [
+        {
+          "url": "https://www.calendrier-tempo.fr/api-tempo",
+          "label": { "en": "API documentation", "fr": "Documentation de l'API" }
+        },
+        {
+          "url": "https://www.calendrier-tempo.fr/methodologie",
+          "label": { "en": "Forecast method", "fr": "Méthode de prévision" }
+        }
+      ]
+    },
+    {
+      "key": "previsions_indicatives",
+      "type": "boolean",
+      "label": {
+        "en": "Also publish D+6 to D+15 forecasts",
+        "fr": "Publier aussi les prévisions J+6 à J+15"
+      },
+      "description": {
+        "en": "Adds one feature per day from D+6 to D+15 (an indicative trend). The whole horizon is always shown in the widget. After a change, update the device from the Discovery tab.",
+        "fr": "Ajoute une fonctionnalité par jour de J+6 à J+15 (tendance indicative). Tout l'horizon reste visible dans le widget. Après un changement, mettez à jour l'appareil depuis l'onglet Découverte."
+      },
+      "required": false,
+      "default": false
+    }
+  ],
+  "widgets": [
+    {
+      "key": "previsions_tempo",
+      "label": { "en": "Tempo forecasts", "fr": "Prévisions Tempo" },
+      "description": {
+        "en": "Today, tomorrow, days left and the chance of a red day over 15 days.",
+        "fr": "Aujourd'hui, demain, jours restants et probabilité de jour rouge sur 15 jours."
+      },
+      "icon": "zap"
+    }
+  ],
+  "scene_triggers": [
+    {
+      "key": "couleur_demain_annoncee",
+      "label": {
+        "en": "Tomorrow's Tempo color announced",
+        "fr": "Couleur Tempo de demain annoncée"
+      },
+      "description": {
+        "en": "EDF has just published tomorrow's color (usually around 11:00).",
+        "fr": "EDF vient de publier la couleur de demain (en général vers 11 h)."
+      },
+      "fields": [
+        {
+          "key": "couleur",
+          "type": "multi_select",
+          "label": { "en": "Color", "fr": "Couleur" },
+          "options": [
+            { "value": "bleu", "label": { "en": "Blue", "fr": "Bleu" } },
+            { "value": "blanc", "label": { "en": "White", "fr": "Blanc" } },
+            { "value": "rouge", "label": { "en": "Red", "fr": "Rouge" } }
+          ]
+        }
+      ],
+      "variables": [
+        { "key": "couleur", "type": "string", "label": { "en": "Color", "fr": "Couleur" } },
+        { "key": "date", "type": "string", "label": { "en": "Date", "fr": "Date" } }
+      ]
+    },
+    {
+      "key": "jour_rouge_prevu",
+      "label": { "en": "Red day forecast", "fr": "Jour rouge prévu" },
+      "description": {
+        "en": "A date from D+2 to D+15 is now forecast red. A forecast, not an EDF announcement.",
+        "fr": "Une date de J+2 à J+15 passe en rouge prévu. Une prévision, pas une annonce d'EDF."
+      },
+      "fields": [
+        {
+          "key": "fiabilite",
+          "type": "multi_select",
+          "label": { "en": "Reliability", "fr": "Fiabilité" },
+          "options": [
+            {
+              "value": "fiable",
+              "label": { "en": "D+2 to D+5 (most reliable)", "fr": "J+2 à J+5 (la plus fiable)" }
+            },
+            {
+              "value": "indicative",
+              "label": { "en": "D+6 to D+15 (trend)", "fr": "J+6 à J+15 (tendance)" }
+            }
+          ]
+        }
+      ],
+      "variables": [
+        { "key": "date", "type": "string", "label": { "en": "Date", "fr": "Date" } },
+        {
+          "key": "jours_avant",
+          "type": "number",
+          "label": { "en": "Days ahead", "fr": "Dans combien de jours" }
+        },
+        {
+          "key": "probabilite_rouge",
+          "type": "number",
+          "label": { "en": "Chance of red (%)", "fr": "Probabilité de rouge (%)" }
+        },
+        {
+          "key": "fiabilite",
+          "type": "string",
+          "label": { "en": "Reliability", "fr": "Fiabilité" }
+        }
+      ]
+    },
+    {
+      "key": "journee_tempo_commencee",
+      "label": { "en": "Tempo day started", "fr": "Journée Tempo commencée" },
+      "description": {
+        "en": "6:00, a new Tempo day starts (the color applies until 6:00 the next day).",
+        "fr": "6 h, une nouvelle journée Tempo commence (sa couleur vaut jusqu'à 6 h le lendemain)."
+      },
+      "fields": [
+        {
+          "key": "couleur",
+          "type": "multi_select",
+          "label": { "en": "Color", "fr": "Couleur" },
+          "options": [
+            { "value": "bleu", "label": { "en": "Blue", "fr": "Bleu" } },
+            { "value": "blanc", "label": { "en": "White", "fr": "Blanc" } },
+            { "value": "rouge", "label": { "en": "Red", "fr": "Rouge" } }
+          ]
+        }
+      ],
+      "variables": [
+        { "key": "couleur", "type": "string", "label": { "en": "Color", "fr": "Couleur" } },
+        { "key": "date", "type": "string", "label": { "en": "Date", "fr": "Date" } }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "status": "ok",
+  "history": [
+    { "date": "2026-10-12", "couleur_reelle": "BLEU" },
+    { "date": "2026-10-13", "couleur_reelle": "BLEU" },
+    { "date": "2026-10-14", "couleur_reelle": "BLEU" },
+    { "date": "2026-10-15", "couleur_reelle": "BLEU" }
+  ]
+}
