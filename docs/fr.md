@@ -42,6 +42,8 @@ Une seule option : **Publier aussi les prévisions J+6 à J+15** (désactivée p
 
 Chaque événement n'est envoyé qu'une fois, même après un redémarrage. L'installation de l'intégration ne déclenche rien.
 
+Pour une scène sur une fonctionnalité de l'appareil, préférez les déclencheurs de l'intégration, ou cochez l'option de seuil de Gladys.
+
 ## Fiabilité
 
 Seule la couleur publiée par EDF fait foi. De J+2 à J+5, la prévision est dans la zone où le site mesure sa performance, la plus fiable ; de J+6 à J+15, c'est une tendance. Les taux de réussite sont publiés sur la page [méthodologie](https://www.calendrier-tempo.fr/methodologie), pas dans l'intégration.
@@ -49,7 +51,7 @@ Seule la couleur publiée par EDF fait foi. De J+2 à J+5, la prévision est dan
 ## Dépannage
 
 - **Pas d'appareil dans Gladys** : créez-le depuis l'onglet Découverte, l'intégration ne le crée jamais seule.
-- **Statut « déconnecté »** dans l'écran Configuration : calendrier-tempo.fr ne répond pas. L'intégration réessaie 5 minutes plus tard, puis toutes les 30 minutes. Les dernières valeurs du jour restent affichées ; prévisions et jours restants sont gardés 24 h au plus.
+- **Statut « déconnecté »** dans l'écran Configuration : calendrier-tempo.fr ne répond pas. L'intégration réessaie 5 minutes plus tard, puis toutes les 30 minutes. Les couleurs officielles déjà lues restent affichées pour leur date, même après un redémarrage ; prévisions et jours restants sont gardés 24 h au plus.
 - **Couleur demain à `inconnue` le matin** : normal, EDF annonce la couleur vers 11 h. L'intégration relit l'API à 11 h 35.
 - Les journaux de l'intégration (Configuration, puis journaux) indiquent chaque lecture en échec.
 

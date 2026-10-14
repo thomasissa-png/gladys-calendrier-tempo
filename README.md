@@ -52,7 +52,7 @@ Les prévisions J+6 à J+15 sont désactivées par défaut : tout l'horizon est 
 
 ## Le widget « Prévisions Tempo »
 
-- Quatre tuiles : aujourd'hui, demain (couleur officielle, ou prévision signalée comme telle avant l'annonce), jours rouges restants, jours blancs restants.
+- Quatre tuiles : aujourd'hui, demain (couleur officielle, ou prévision signalée comme telle avant l'annonce), « Rouges » et « Blancs » (jours restants dans la saison).
 - Un graphique de la probabilité de jour rouge, d'aujourd'hui à J+15, avec les jours rouges marqués.
 - La liste de J+2 à J+11 : couleur prévue et sa probabilité, « tendance » au-delà de J+5.
 - Un lien vers le [calendrier complet](https://www.calendrier-tempo.fr/calendrier).
@@ -69,6 +69,8 @@ Gladys impose ses propres couleurs de widget : le bleu Tempo s'affiche en bleu �
 
 Chaque événement n'est envoyé qu'une fois par transition, même après un redémarrage (le dernier état émis est gardé dans le dossier `/data` de l'intégration). À l'installation, l'état présent est seulement mémorisé : rien ne se déclenche. Si Gladys démarre après 7 h, « Journée Tempo commencée » n'est pas rattrapé pour ce jour-là.
 
+Pour une scène sur une fonctionnalité de l'appareil (par exemple « Couleur actuelle égale à rouge »), préférez les déclencheurs de l'intégration ci-dessus, ou cochez l'option de seuil de Gladys : l'intégration n'envoie une couleur que lorsqu'elle change, mais Gladys peut réévaluer une scène sans seuil à chaque valeur reçue.
+
 ### Exemples
 
 - **Veille d'un jour rouge** : déclencheur « Couleur Tempo de demain annoncée », couleur `Rouge` ; action « Envoyer un message » : « EDF annonce un jour rouge demain : pensez à décaler vos usages. »
@@ -77,9 +79,9 @@ Chaque événement n'est envoyé qu'une fois par transition, même après un red
 
 ## Rafraîchissement
 
-Heure de Paris, quel que soit le fuseau de votre installation : toutes les 30 minutes (4 petites requêtes), à 0 h 05 pour le changement de jour, et à 11 h 35 pour la couleur de demain annoncée par EDF. Ces deux rendez-vous sont décalés de 0 à 120 secondes, une valeur tirée au hasard une fois pour toutes à l'installation, pour ne pas faire arriver toutes les installations en même temps. À 6 h et à 22 h, la couleur actuelle et la période sont recalculées sans appel à l'API.
+Heure de Paris, quel que soit le fuseau de votre installation : toutes les 30 minutes (4 petites requêtes), à 0 h 05 pour le changement de jour, et à 11 h 35 pour la couleur de demain annoncée par EDF. Ces deux rendez-vous sont décalés de 0 à 120 secondes, une valeur tirée au hasard une fois pour toutes à l'installation, pour ne pas faire arriver toutes les installations en même temps. À minuit, à 6 h et à 22 h, le jour, la couleur actuelle et la période sont recalculés sans appel à l'API.
 
-Si les prévisions ou les jours restants ne répondent pas, les dernières valeurs reçues sont conservées 24 h au plus. Si les couleurs officielles ne répondent pas, l'écran Configuration de l'intégration affiche « déconnecté » ; les valeurs du jour restent affichées, puis passent à `inconnue` après minuit si la panne dure. Après un échec, une seule nouvelle tentative a lieu 5 minutes plus tard, puis le cycle de 30 minutes reprend, sans relance en rafale.
+Si les prévisions ou les jours restants ne répondent pas, les dernières valeurs reçues sont conservées 24 h au plus. Si les couleurs officielles ne répondent pas, l'écran Configuration de l'intégration affiche « déconnecté » ; les couleurs officielles déjà lues restent affichées pour leur date, y compris après un redémarrage (elles sont gardées dans `/data`), et seule une couleur jamais lue passe à `inconnue`. Au redémarrage, rien n'est publié avant la première lecture : les couleurs ne passent jamais par `inconnue`. Après un échec, une seule nouvelle tentative a lieu 5 minutes plus tard, puis le cycle de 30 minutes reprend, sans relance en rafale.
 
 L'intégration n'envoie aucune donnée personnelle : de simples lectures de l'API, avec le User-Agent `CalendrierTempo-Gladys/<version>`.
 

@@ -29,5 +29,21 @@ la note de la publication GitHub de cette version.
   120 secondes propre à chaque installation et une seule relance 5 minutes
   après un échec.
 
+### Corrections avant publication (recette du 2026-10-14)
+
+- Au redémarrage, rien n'est publié avant la première lecture : les couleurs
+  ne passent plus par `inconnue`, et les scènes ne se déclenchent plus à tort.
+- Si l'API ne répond pas au redémarrage ou au changement de jour, les couleurs
+  officielles déjà lues (gardées dans `/data`) restent publiées pour leur date.
+- Une panne de la source officielle (`source_indisponible`) n'efface plus la
+  couleur de demain déjà connue et déclenche la relance à 5 minutes.
+- À minuit, « Aujourd'hui » et « Demain » sont recalés sans appel à l'API (ils
+  gardaient les couleurs de la veille jusqu'à la lecture de 0 h 05).
+- Une couleur n'est envoyée à Gladys que si elle change ; seuls les compteurs
+  sont republiés toutes les 30 minutes.
+- Widget : tuiles « Rouges » et « Blancs », lisibles à toutes les largeurs.
+- Une réponse facultative qui n'est pas un objet JSON n'invalide plus toute la
+  lecture.
+
 [Unreleased]: https://github.com/thomasissa-png/gladys-calendrier-tempo/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/thomasissa-png/gladys-calendrier-tempo/releases/tag/v0.1.0

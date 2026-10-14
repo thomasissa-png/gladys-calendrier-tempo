@@ -167,16 +167,8 @@ export function buildForecastWidget(data, language = 'fr') {
     components: [
       colorTile({ en: 'Today', fr: "Aujourd'hui" }, data.today),
       tomorrowTile(data),
-      counterTile(
-        { en: 'Red days left', fr: 'Rouges restants' },
-        data.remaining.rouge,
-        WIDGET_COLORS.DANGER,
-      ),
-      counterTile(
-        { en: 'White days left', fr: 'Blancs restants' },
-        data.remaining.blanc,
-        WIDGET_COLORS.NEUTRAL,
-      ),
+      counterTile({ en: 'Red left', fr: 'Rouges' }, data.remaining.rouge, WIDGET_COLORS.DANGER),
+      counterTile({ en: 'White left', fr: 'Blancs' }, data.remaining.blanc, WIDGET_COLORS.NEUTRAL),
       redChart(data),
       {
         type: 'status',

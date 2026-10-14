@@ -10,7 +10,14 @@
 //   - toutes les 30 min, plus 0 h 05 et 11 h 35 heure de Paris ; après un échec,
 //     une seule relance 5 min plus tard, puis retour au cycle.
 // En plus : décalage aléatoire de 0 à 120 s propre à l'installation sur les
-// rendez-vous fixes, et 6 h / 22 h recalculés sans appel à l'API.
+// rendez-vous fixes, et minuit / 6 h / 22 h recalculés sans appel à l'API.
+//
+// Publication dans Gladys : rien avant la fin de la première lecture (jamais de
+// passage à « inconnue » au redémarrage) ; une couleur n'est envoyée que si elle
+// diffère de la valeur que Gladys a déjà (sinon les scènes « égal à » sans
+// option de seuil repartiraient) ; les compteurs, eux, sont republiés toutes
+// les 30 min pour rester datés. Si l'API ne répond pas, les couleurs officielles
+// déjà lues (gardées dans /data) restent valables pour leur date.
 // -----------------------------------------------------------------------------
 
 import { createLogger } from '@gladysassistant/integration-sdk';
@@ -31,12 +38,30 @@ import { normalizeConfig } from './config.js';
 import { calendrierTempo } from './devices/calendrierTempo.js';
 import { computeSceneEvents, emptyTriggerMemory } from './scenes.js';
 import { createStateStore } from './store.js';
-import { ApiDataError, buildTempoData, parseHistory } from './tempo.js';
+import {
+  ApiDataError,
+  buildTempoData,
+  COLORS,
+  dayForOffset,
+  parseDay,
+  parseHistory,
+} from './tempo.js';
 import { addDays, nextParisTime, parisParts } from './time.js';
 import { FORECAST_WIDGET, createWidgets } from './widgets.js';
 
-// Une valeur stable est republiée toutes les 30 min, pour rester datée dans Gladys.
+// Un compteur stable est republié toutes les 30 min, pour rester daté dans Gladys
+// (les textes ne sont jamais marqués « trop anciens » : jamais republiés tels quels).
 const HEARTBEAT_MS = SCAN_INTERVAL_MS;
+// Rendez-vous de minuit : 1 s après, pour être sûr d'être le nouveau jour.
+const MIDNIGHT_DELAY_MS = 1000;
+
+const isPlainObject = (value) =>
+  value !== null && typeof value === 'object' && !Array.isArray(value);
+
+/** Réponse au format de /api/today pour une couleur officielle déjà lue. */
+function knownDayPayload(date, color) {
+  return { status: 'ok', date, couleur: color.toUpperCase(), code: COLORS.indexOf(color) + 1 };
+}
 
 const API_DOWN_MESSAGE = {
   en: 'calendrier-tempo.fr cannot be reached. New attempt in a few minutes.',
@@ -63,12 +88,18 @@ export function createTempoIntegration(gladys, options = {}) {
     apiReachable: null,
     started: false,
     stopped: false,
+    // Faux tant que la première lecture (réussie ou non) n'est pas terminée.
+    firstReadDone: false,
+    // Faux tant que les valeurs que Gladys a déjà n'ont pas été relues (connexion).
+    gladysValuesKnown: false,
     inflight: null,
     cycleTimer: null,
     dailyTimers: new Map(),
   };
 
   const widgets = createWidgets(() => state.data);
+  // Valeur texte que Gladys a déjà, par fonctionnalité (relue à chaque connexion).
+  const knownTexts = new Map();
 
   // ---------------------------------------------------------------- état /data
   async function loadState() {
@@ -91,16 +122,50 @@ export function createTempoIntegration(gladys, options = {}) {
   }
 
   // ------------------------------------------------------------- publication
-  async function publishStates({ force = false } = {}) {
-    const states = calendrierTempo.buildStates(gladys, state.data, now(), state.config);
-    try {
-      if (force) {
-        gladys.forgetPublishedStates(calendrierTempo.deviceExternalId(gladys));
+  /** Mémorise les couleurs que Gladys a pour notre appareil (null = rien). */
+  function rememberGladysValues(device) {
+    if (!device || device.external_id !== calendrierTempo.deviceExternalId(gladys)) {
+      return;
+    }
+    for (const feature of device.features ?? []) {
+      if (typeof feature.last_value_string === 'string') {
+        knownTexts.set(feature.external_id, feature.last_value_string);
+      } else {
+        knownTexts.delete(feature.external_id);
       }
-      await gladys.publishChangedStates(states, { heartbeat: HEARTBEAT_MS });
+    }
+  }
+
+  async function publishStates() {
+    // REGRESSION KO-1 (recette du 2026-10-14) : avant la première lecture, rien
+    // n'est publié ; sinon les couleurs passaient à « inconnue » au redémarrage.
+    // Ni avant d'avoir relu ce que Gladys a déjà : sinon une lecture finie avant
+    // la connexion renvoyait des couleurs identiques (scènes sans seuil relancées).
+    if (!state.firstReadDone || !state.gladysValuesKnown) {
+      return;
+    }
+    const states = calendrierTempo.buildStates(gladys, state.data, now(), state.config);
+    const id = (s) => s.device_feature_external_id;
+    const texts = states.filter((s) => s.text !== undefined && knownTexts.get(id(s)) !== s.text);
+    const numbers = states.filter((s) => s.text === undefined);
+    try {
+      if (texts.length > 0) {
+        await gladys.publishStates(texts);
+        for (const s of texts) {
+          knownTexts.set(id(s), s.text);
+        }
+      }
+      await gladys.publishChangedStates(numbers, { heartbeat: HEARTBEAT_MS });
     } catch (err) {
       logger.warn(`Publication des états impossible pour l'instant : ${err.message}`);
     }
+  }
+
+  /** Appareil créé ou modifié par l'utilisateur : ses valeurs sont envoyées aussitôt. */
+  async function onDeviceChanged(device) {
+    rememberGladysValues(device);
+    gladys.forgetPublishedStates(calendrierTempo.deviceExternalId(gladys));
+    await publishStates();
   }
 
   async function publishSceneEvents() {
@@ -143,6 +208,9 @@ export function createTempoIntegration(gladys, options = {}) {
   async function getOptional(endpoint, missing) {
     try {
       const payload = await api.get(endpoint);
+      if (!isPlainObject(payload)) {
+        throw new TempoApiError(`/api/${endpoint} : réponse inattendue`);
+      }
       if (state.failing.delete(endpoint)) {
         logger.info(`/api/${endpoint} de nouveau disponible`);
       }
@@ -176,6 +244,44 @@ export function createTempoIntegration(gladys, options = {}) {
     }
   }
 
+  /** Dernière réponse valide d'un endpoint facultatif, 24 h au plus, sinon {}. */
+  function lastPayload(endpoint) {
+    const last = state.payloads[endpoint];
+    return last && now() - last.at <= STALE_PAYLOAD_MAX_AGE_MS ? last.payload : {};
+  }
+
+  /**
+   * REGRESSION KO-2 (recette du 2026-10-14) : une réponse sans couleur (panne de
+   * la source officielle, `source_indisponible`) n'efface jamais une couleur
+   * officielle déjà lue pour cette date.
+   */
+  function withKnownColor(payload, date) {
+    const parsed = parseDay(payload);
+    const known = state.officialColors[date];
+    return parsed.color === null && known ? knownDayPayload(date, known) : payload;
+  }
+
+  /** Données reconstruites sans appel à l'API : couleurs déjà lues et réponses gardées. */
+  function dataFromMemory(nowMs) {
+    const date = parisParts(nowMs).date;
+    const day = (d) => {
+      const color = state.officialColors[d];
+      return color ? knownDayPayload(d, color) : { status: 'unavailable' };
+    };
+    const data = buildTempoData(
+      day(date),
+      day(addDays(date, 1)),
+      lastPayload(ENDPOINTS.REMAINING),
+      lastPayload(ENDPOINTS.PREDICTIONS),
+      date,
+    );
+    const yesterday = addDays(date, -1);
+    return {
+      ...data,
+      yesterday: { date: yesterday, color: state.officialColors[yesterday] ?? null },
+    };
+  }
+
   async function read(nowMs) {
     const paris = parisParts(nowMs);
     const today = await api.get(ENDPOINTS.TODAY);
@@ -183,7 +289,19 @@ export function createTempoIntegration(gladys, options = {}) {
     const missing = [];
     const remaining = await getOptional(ENDPOINTS.REMAINING, missing);
     const predictions = await getOptional(ENDPOINTS.PREDICTIONS, missing);
-    const data = buildTempoData(today, tomorrow, remaining, predictions, paris.date);
+    const tomorrowDate = addDays(paris.date, 1);
+    const data = buildTempoData(
+      withKnownColor(today, paris.date),
+      withKnownColor(tomorrow, tomorrowDate),
+      remaining,
+      predictions,
+      paris.date,
+    );
+    // Demain confirmé par /api/predictions alors que /api/tomorrow n'a pas répondu.
+    const j1 = dayForOffset(data, 1);
+    if (!data.tomorrow.color && j1?.official) {
+      data.tomorrow = { date: tomorrowDate, color: j1.color, code: COLORS.indexOf(j1.color) + 1 };
+    }
 
     const yesterday = addDays(paris.date, -1);
     for (const day of [data.yesterday, data.today, data.tomorrow]) {
@@ -200,7 +318,11 @@ export function createTempoIntegration(gladys, options = {}) {
     if (data.stale) {
       logger.info('Réponse de la veille reçue (cache), nouvelle lecture dans 5 minutes');
     }
-    const complete = missing.length === 0 && !data.stale;
+    const sourceDown = [today, tomorrow].some((p) => p?.source_indisponible === true);
+    if (sourceDown) {
+      logger.info('Source officielle momentanément indisponible, couleurs déjà lues conservées');
+    }
+    const complete = missing.length === 0 && !data.stale && !sourceDown;
     const yesterdayColor = state.officialColors[yesterday] ?? null;
     return { data: { ...data, yesterday: { date: yesterday, color: yesterdayColor } }, complete };
   }
@@ -236,11 +358,15 @@ export function createTempoIntegration(gladys, options = {}) {
       }
       logger.warn(`Lecture impossible : ${err.message}`);
       await setApiReachable(false);
-      // Les dernières valeurs restent affichées tant qu'elles concernent aujourd'hui.
-      if (state.data && state.data.referenceDate !== parisParts(nowMs).date) {
-        state.data = null;
+      // Les dernières valeurs restent affichées tant qu'elles concernent aujourd'hui ;
+      // sinon (redémarrage, changement de jour), reprise des couleurs déjà lues.
+      // REGRESSION KO-1 (recette du 2026-10-14) : un redémarrage pendant une panne
+      // gardait « inconnue » alors que /data connaissait la couleur du jour.
+      if (!state.data || state.data.referenceDate !== parisParts(nowMs).date) {
+        state.data = dataFromMemory(nowMs);
       }
     }
+    state.firstReadDone = true;
     await publishStates();
     await publishSceneEvents();
     refreshWidgets();
@@ -258,8 +384,15 @@ export function createTempoIntegration(gladys, options = {}) {
     return state.inflight;
   }
 
-  // Sans appel à l'API : période (6 h, 22 h), couleur actuelle et début de journée.
+  // Sans appel à l'API : changement de jour (minuit), période (6 h, 22 h),
+  // couleur actuelle et début de journée.
   async function tick() {
+    // REGRESSION KO-3 (recette du 2026-10-14) : de 0 h à la lecture de 0 h 05,
+    // « Aujourd'hui » et « Demain » gardaient les couleurs de la veille.
+    if (state.data && state.data.referenceDate !== parisParts(now()).date) {
+      state.data = dataFromMemory(now());
+      refreshWidgets();
+    }
     await publishStates();
     await publishSceneEvents();
     await saveState();
@@ -311,6 +444,7 @@ export function createTempoIntegration(gladys, options = {}) {
       state.jitterMs,
       refresh,
     );
+    scheduleDaily('minuit', 0, 0, MIDNIGHT_DELAY_MS, tick);
     scheduleDaily('debut-journee-tempo', TEMPO_DAY_START_HOUR, 0, 0, tick);
     scheduleDaily('fin-heures-pleines', PEAK_END_HOUR, 0, 0, tick);
     await refresh();
@@ -329,13 +463,19 @@ export function createTempoIntegration(gladys, options = {}) {
   async function onConnected() {
     state.config = normalizeConfig(await gladys.getConfig());
     await gladys.publishDiscoveredDevices([calendrierTempo.buildDevice(gladys, state.config)]);
+    // Valeurs que Gladys a déjà : seules les couleurs différentes seront envoyées.
+    knownTexts.clear();
+    for (const device of await gladys.getDevices()) {
+      rememberGladysValues(device);
+    }
+    state.gladysValuesKnown = true;
     // Statut déjà connu (lecture faite avant la connexion) : transmis de nouveau.
     const known = state.apiReachable;
     state.apiReachable = null;
     if (known !== null) {
       await setApiReachable(known);
     }
-    await publishStates({ force: true });
+    await publishStates();
     await publishSceneEvents();
     refreshWidgets();
   }
@@ -343,7 +483,7 @@ export function createTempoIntegration(gladys, options = {}) {
   async function onConfigUpdated(newConfig) {
     state.config = normalizeConfig(newConfig);
     await gladys.publishDiscoveredDevices([calendrierTempo.buildDevice(gladys, state.config)]);
-    await publishStates({ force: true });
+    await publishStates();
   }
 
   return {
@@ -353,6 +493,7 @@ export function createTempoIntegration(gladys, options = {}) {
     tick,
     onConnected,
     onConfigUpdated,
+    onDeviceChanged,
     publishStates,
     widgets,
     get data() {

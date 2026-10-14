@@ -12,7 +12,14 @@ import { registerHandlers } from '../src/handlers.js';
 import { createTempoIntegration } from '../src/integration.js';
 import { parisWallTimeToInstant } from '../src/time.js';
 import { FORECAST_WIDGET } from '../src/widgets.js';
-import { RECORDED_AT, fakeApi, fakeClock, memoryStore, realPayloads } from './helpers.js';
+import {
+  RECORDED_AT,
+  TOMORROW_PENDING,
+  fakeApi,
+  fakeClock,
+  memoryStore,
+  realPayloads,
+} from './helpers.js';
 
 const silent = createLogger({ level: 'silent' });
 
@@ -147,15 +154,17 @@ test('prévisions et jours restants gardés 24 h au plus pendant une panne', asy
   tempo.stop();
 });
 
-test('panne qui dure après minuit : couleurs « inconnue », jamais celles de la veille', async () => {
+test('panne qui dure après minuit : couleurs recalées sur leur date, jamais celles de la veille', async () => {
   const payloads = realPayloads();
   const { tempo, clock, gladys } = await setup({ payloads });
   await tempo.start();
   payloads.today = new TempoApiError('/api/today : délai de 15 s dépassé');
   clock.set(parisWallTimeToInstant('2026-10-15', 0, 6));
   await tempo.refresh();
-  assert.equal(tempo.data, null);
-  assert.equal(last(gladys, FEATURE.TODAY), 'inconnue');
+  // La couleur officielle du 15 (lue la veille comme « demain ») devient « aujourd'hui ».
+  assert.equal(tempo.data.referenceDate, '2026-10-15');
+  assert.equal(last(gladys, FEATURE.TODAY), 'bleu');
+  assert.equal(last(gladys, FEATURE.TOMORROW), 'inconnue');
   assert.equal(last(gladys, FEATURE.RED_LEFT), 22, 'les compteurs gardent leur valeur');
   tempo.stop();
 });
@@ -212,5 +221,219 @@ test('appareil créé par l’utilisateur : valeurs republiées aussitôt', asyn
   const before = gladys.fake.states.length;
   await gladys.fake.deviceCreated(gladys.fake.discoveredDevices[0]);
   assert.ok(gladys.fake.states.length >= before + 13);
+  tempo.stop();
+});
+
+// ---------------------------------------------------------------------------
+// Non-régressions de la recette du 2026-10-14 (docs/audits/2026-10-14-recette-gladys.md)
+// ---------------------------------------------------------------------------
+
+/** Appareil tel que Gladys le rend après création, avec les valeurs qu'il a déjà. */
+function createdDevice(gladys, values) {
+  const device = calendrierTempo.buildDevice(gladys, { previsions_indicatives: false });
+  return {
+    ...device,
+    features: device.features.map((f) => ({
+      ...f,
+      last_value_string: values[f.external_id.split(':').at(-1)] ?? null,
+    })),
+  };
+}
+
+const BLUE_EVERYWHERE = {
+  [FEATURE.TODAY]: 'bleu',
+  [FEATURE.CURRENT]: 'bleu',
+  [FEATURE.PERIOD]: 'hp',
+  [FEATURE.TOMORROW]: 'bleu',
+  [FEATURE.forecast(2)]: 'bleu',
+  [FEATURE.forecast(3)]: 'bleu',
+  [FEATURE.forecast(4)]: 'bleu',
+  [FEATURE.forecast(5)]: 'bleu',
+  [FEATURE.NEXT_RED]: 'aucun',
+  [FEATURE.NEXT_WHITE]: '2026-10-29',
+};
+
+const textsSent = (gladys) => gladys.fake.states.filter((s) => s.text !== undefined);
+
+// REGRESSION: KO-1 (connexion à Gladys avant la fin de la première lecture), fixé le 2026-10-14
+test('connexion avant la première lecture : aucun état « inconnue » publié', async () => {
+  const payloads = realPayloads();
+  let release;
+  const todayGate = new Promise((resolve) => {
+    release = resolve;
+  });
+  payloads.today = async () => {
+    await todayGate;
+    return realPayloads().today;
+  };
+  const gladys = createFakeGladys();
+  const clock = fakeClock();
+  const tempo = createTempoIntegration(gladys, {
+    api: fakeApi(payloads),
+    store: memoryStore(),
+    now: clock.now,
+    timers: clock.timers,
+    random: () => 0.5,
+    logger: silent,
+  });
+  registerHandlers(gladys, tempo);
+  const started = tempo.start();
+  await gladys.connect(); // la connexion arrive pendant la première lecture
+  assert.deepEqual(textsSent(gladys), [], 'rien avant la fin de la lecture');
+  release();
+  await started;
+  assert.ok(textsSent(gladys).length > 0);
+  assert.ok(textsSent(gladys).every((s) => s.text !== 'inconnue'));
+  assert.equal(last(gladys, FEATURE.TODAY), 'bleu');
+  tempo.stop();
+});
+
+// REGRESSION: KO-1 (redémarrage pendant une panne de l'API), fixé le 2026-10-14
+test('redémarrage pendant une panne : couleurs du jour reprises de /data', async () => {
+  const store = memoryStore();
+  const first = await setup({ store });
+  await first.tempo.start();
+  first.tempo.stop();
+  const down = new TempoApiError('/api/today : HTTP 503');
+  const payloads = { ...realPayloads(), today: down, tomorrow: down };
+  const again = await setup({ store, payloads, start: RECORDED_AT + 10 * 60 * 1000 });
+  await again.tempo.start();
+  assert.equal(last(again.gladys, FEATURE.TODAY), 'bleu');
+  assert.equal(last(again.gladys, FEATURE.CURRENT), 'bleu');
+  assert.equal(last(again.gladys, FEATURE.TOMORROW), 'bleu');
+  assert.equal(last(again.gladys, FEATURE.forecast(2)), 'bleu', 'prévisions gardées 24 h');
+  assert.ok(textsSent(again.gladys).every((s) => s.text !== 'inconnue'));
+  assert.equal(again.gladys.fake.connectionStatus.connected, false);
+  again.tempo.stop();
+});
+
+// REGRESSION: KO-1 et KO-5 (couleurs déjà dans Gladys renvoyées au redémarrage), fixé le 2026-10-14
+test('redémarrage : aucune couleur renvoyée si Gladys a déjà la même valeur', async () => {
+  const probe = createFakeGladys();
+  const gladys = createFakeGladys({ devices: [createdDevice(probe, BLUE_EVERYWHERE)] });
+  const clock = fakeClock();
+  const tempo = createTempoIntegration(gladys, {
+    api: fakeApi(realPayloads()),
+    store: memoryStore(),
+    now: clock.now,
+    timers: clock.timers,
+    random: () => 0.5,
+    logger: silent,
+  });
+  registerHandlers(gladys, tempo);
+  await gladys.connect();
+  await tempo.start();
+  assert.deepEqual(textsSent(gladys), []);
+  assert.equal(last(gladys, FEATURE.RED_LEFT), 22, 'les compteurs sont publiés');
+  tempo.stop();
+});
+
+// REGRESSION: KO-1 et KO-5 (lecture finie avant la connexion), fixé le 2026-10-14
+test('lecture finie avant la connexion : rien avant la connexion, puis seulement les écarts', async () => {
+  const probe = createFakeGladys();
+  const values = { ...BLUE_EVERYWHERE, [FEATURE.TOMORROW]: 'rouge' };
+  const gladys = createFakeGladys({ devices: [createdDevice(probe, values)] });
+  const clock = fakeClock();
+  const tempo = createTempoIntegration(gladys, {
+    api: fakeApi(realPayloads()),
+    store: memoryStore(),
+    now: clock.now,
+    timers: clock.timers,
+    random: () => 0.5,
+    logger: silent,
+  });
+  registerHandlers(gladys, tempo);
+  await tempo.start(); // première lecture terminée, Gladys pas encore joignable
+  assert.deepEqual(gladys.fake.states, []);
+  await gladys.connect();
+  assert.deepEqual(
+    textsSent(gladys).map((s) => [s.device_feature_external_id.split(':').at(-1), s.text]),
+    [[FEATURE.TOMORROW, 'bleu']],
+    'seule la valeur différente de celle de Gladys est envoyée',
+  );
+  tempo.stop();
+});
+
+// REGRESSION: KO-5 (republication de fond des textes inchangés), fixé le 2026-10-14
+test('lecture suivante sans changement : textes non renvoyés, compteurs avec battement de 30 min', async (t) => {
+  const { gladys, tempo, clock } = await setup();
+  const calls = [];
+  const original = gladys.publishChangedStates.bind(gladys);
+  t.mock.method(gladys, 'publishChangedStates', (states, options) => {
+    calls.push({ states, options });
+    return original(states, options);
+  });
+  await tempo.start();
+  const texts = textsSent(gladys).length;
+  clock.set(RECORDED_AT + SCAN_INTERVAL_MS + 1000);
+  await tempo.refresh();
+  assert.equal(textsSent(gladys).length, texts, 'aucun texte inchangé renvoyé');
+  // Les compteurs passent par publishChangedStates avec un battement de 30 min ;
+  // les textes jamais.
+  assert.ok(calls.length >= 2);
+  for (const { states, options } of calls) {
+    assert.deepEqual(options, { heartbeat: SCAN_INTERVAL_MS });
+    assert.ok(states.every((s) => s.text === undefined));
+    assert.equal(states.length, 3);
+  }
+  tempo.stop();
+});
+
+// REGRESSION: KO-2 (source_indisponible efface la couleur de demain), fixé le 2026-10-14
+test('source officielle indisponible : couleur de demain gardée, relance à 5 min', async () => {
+  const payloads = realPayloads();
+  const { gladys, tempo } = await setup({ payloads });
+  await tempo.start();
+  // Forme écrite par le site (app.py, _edf_unavailable avec failed=True).
+  payloads.tomorrow = {
+    status: 'unavailable',
+    message:
+      "La couleur de demain n'a pas pu être vérifiée : la source officielle ne répond pas pour le moment. Nouvel essai automatique.",
+    source_indisponible: true,
+  };
+  payloads.predictions.predictions[1].confirmed = false;
+  assert.equal(await tempo.refresh(), RETRY_INTERVAL_MS);
+  assert.equal(last(gladys, FEATURE.TOMORROW), 'bleu');
+  assert.equal(tempo.data.tomorrow.color, 'bleu');
+  tempo.stop();
+});
+
+test('demain confirmé par /api/predictions quand /api/tomorrow ne l’a pas encore', async () => {
+  const payloads = realPayloads();
+  payloads.tomorrow = TOMORROW_PENDING;
+  const { gladys, tempo } = await setup({ payloads });
+  await tempo.start();
+  assert.equal(last(gladys, FEATURE.TOMORROW), 'bleu');
+  tempo.stop();
+});
+
+// REGRESSION: KO-3 (valeurs de la veille entre 0 h et 0 h 05), fixé le 2026-10-14
+test('minuit : jour recalé sans appel à l’API', async () => {
+  const { gladys, tempo, clock, api } = await setup();
+  await tempo.start();
+  const calls = api.calls.length;
+  const midnight = [...clock.pending.values()].find(
+    (t) => new Date(t.at).toISOString() === '2026-10-14T22:00:01.000Z',
+  );
+  assert.ok(midnight, 'rendez-vous de minuit (+1 s) programmé');
+  clock.set(parisWallTimeToInstant('2026-10-15', 0, 0, 1));
+  await tempo.tick();
+  assert.equal(api.calls.length, calls, 'aucun appel');
+  assert.equal(tempo.data.referenceDate, '2026-10-15');
+  assert.equal(last(gladys, FEATURE.TODAY), 'bleu');
+  assert.equal(last(gladys, FEATURE.TOMORROW), 'inconnue');
+  assert.equal(last(gladys, FEATURE.forecast(2)), 'bleu');
+  assert.equal(tempo.data.days[0].date, '2026-10-15');
+  tempo.stop();
+});
+
+test('réponse facultative qui n’est pas un objet : échec de l’endpoint, pas de la lecture', async () => {
+  const payloads = realPayloads();
+  const { gladys, tempo } = await setup({ payloads });
+  await tempo.start();
+  payloads.predictions = [];
+  assert.equal(await tempo.refresh(), RETRY_INTERVAL_MS);
+  assert.equal(gladys.fake.connectionStatus.connected, true);
+  assert.equal(tempo.data.days.length, 16, 'dernière réponse valide gardée');
   tempo.stop();
 });

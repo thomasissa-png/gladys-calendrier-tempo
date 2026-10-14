@@ -42,7 +42,7 @@ export function fakeApi(responses) {
       calls.push(endpoint);
       let value = responses[endpoint];
       if (typeof value === 'function') {
-        value = value();
+        value = await value();
       }
       if (value instanceof Error) {
         throw value;

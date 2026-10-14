@@ -44,6 +44,8 @@ One option: **Also publish D+6 to D+15 forecasts** (off by default). It adds one
 
 Each event is sent once, even after a restart. Installing the integration fires nothing.
 
+For a scene on a feature of the device, prefer the integration's triggers, or tick the Gladys threshold option.
+
 ## Reliability
 
 Only the color published by EDF is official. From D+2 to D+5 the forecast is in the range where the site measures its performance, the most reliable one; from D+6 to D+15 it is a trend. Success rates are published on the [methodology page](https://www.calendrier-tempo.fr/methodologie), not in the integration.
@@ -51,7 +53,7 @@ Only the color published by EDF is official. From D+2 to D+5 the forecast is in 
 ## Troubleshooting
 
 - **No device in Gladys**: create it from the Discovery tab; the integration never creates it by itself.
-- **"Disconnected" status** on the Configuration screen: calendrier-tempo.fr is not answering. The integration retries 5 minutes later, then every 30 minutes. Today's values stay displayed; forecasts and days left are kept for 24 hours at most.
+- **"Disconnected" status** on the Configuration screen: calendrier-tempo.fr is not answering. The integration retries 5 minutes later, then every 30 minutes. Official colors already read stay displayed for their date, even after a restart; forecasts and days left are kept for 24 hours at most.
 - **Tomorrow's color is `inconnue` in the morning**: expected, EDF announces it around 11:00. The integration reads the API again at 11:35 (Paris time).
 
 Contact: jean-pierre@calendrier-tempo.fr. Free, independent service with no availability guarantee. Not affiliated with EDF or RTE.

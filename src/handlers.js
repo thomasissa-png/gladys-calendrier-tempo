@@ -20,9 +20,8 @@ export function registerHandlers(gladys, tempo) {
 
   // Appareil créé ou modifié : ses valeurs sont publiées tout de suite (Gladys
   // ignore les états d'une fonctionnalité qui n'existe pas encore).
-  const republish = async () => tempo.publishStates({ force: true });
-  gladys.onDeviceCreated(republish);
-  gladys.onDeviceUpdated(republish);
+  gladys.onDeviceCreated((device) => tempo.onDeviceChanged(device));
+  gladys.onDeviceUpdated((device) => tempo.onDeviceChanged(device));
 
   // Toutes les fonctionnalités sont en lecture seule.
   gladys.onSetValue(async () => {
