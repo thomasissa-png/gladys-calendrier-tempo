@@ -1,6 +1,6 @@
 {
   "name": "gladys-calendrier-tempo",
-  "version": "0.2.0",
+  "version": "0.1.0",
   "private": true,
   "description": "Intégration Gladys Assistant : couleur Tempo EDF du jour et de demain, prévisions jusqu'à 15 jours, jours restants, widget et déclencheurs de scène (API publique de calendrier-tempo.fr).",
   "type": "module",

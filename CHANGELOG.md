@@ -10,8 +10,6 @@ la note de la publication GitHub de cette version.
 
 ## [Unreleased]
 
-## [0.2.0] - 2026-10-17
-
 Demandes d'utilisateurs du forum Gladys.
 
 ### Ajouts
@@ -92,6 +90,5 @@ Demandes d'utilisateurs du forum Gladys.
 - Une réponse facultative qui n'est pas un objet JSON n'invalide plus toute la
   lecture.
 
-[Unreleased]: https://github.com/thomasissa-png/gladys-calendrier-tempo/compare/v0.2.0...HEAD
-[0.2.0]: https://github.com/thomasissa-png/gladys-calendrier-tempo/compare/v0.1.0...v0.2.0
+[Unreleased]: https://github.com/thomasissa-png/gladys-calendrier-tempo/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/thomasissa-png/gladys-calendrier-tempo/releases/tag/v0.1.0
