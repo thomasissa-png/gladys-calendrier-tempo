@@ -25,9 +25,13 @@ Demandes d'utilisateurs du forum Gladys.
   Découverte pour les voir.
 - Widget : ligne « Prix actuel : 0,1654 €/kWh (HP, bleu) » en tête de la liste
   (J+2 à J+10 ensuite), mise à jour à 6 h et à 22 h.
-- Aucun prix n'est écrit dans l'intégration : sans grille dans la réponse de
-  l'API, le prix reste inconnu (rien d'affiché, rien de publié). La dernière
-  grille lue est gardée 24 h au plus pendant une panne.
+- Aucun prix n'est écrit dans l'intégration : une réponse sans grille (copie
+  de secours ancienne, retour arrière du site) garde la dernière grille lue,
+  24 h au plus, y compris pendant une panne ; au-delà, le prix est inconnu
+  (rien d'affiché dans le widget, rien de publié). Gladys n'ayant pas d'état
+  « inconnu » pour une valeur en euros, l'appareil garde alors son dernier prix,
+  daté : dans une scène sur un prix, ajoutez la condition « Couleur actuelle
+  différente de `inconnue` ».
 
 ### Corrections
 
@@ -35,11 +39,21 @@ Demandes d'utilisateurs du forum Gladys.
   0 à 2 (toutes les valeurs à 0 en octobre) ou de 0 à 150. Les valeurs étaient
   bien en %, mais Gladys calait l'axe sur les données. Le graphique montre
   désormais deux aires, « Bleu ou blanc » et « Rouge » (en rouge), sur un axe de
-  0 à 100 %.
-- Widget : quand aucun jour rouge n'est possible sur les 15 jours (du 1er avril
-  au 31 octobre), le graphique vide laisse la place au message « Pas de jour
-  rouge possible avant le 1er novembre. » ; sans aucune prévision, « Aucune
-  prévision disponible pour le moment. ».
+  0 à 100 % (« % » dans le titre : Gladys affiche les graduations sans unité).
+- Widget : quand aucun jour de l'horizon ne peut être rouge (un rouge n'est
+  possible que du 1er novembre au 31 mars, hors week-ends et jours fériés
+  français, Pâques comprise ; le 1er novembre, Toussaint, n'est donc jamais
+  rouge), le graphique vide laisse la place au message « Pas de jour rouge
+  possible avant le 1er novembre. » (sans coupure entre « 1er » et
+  « novembre ») ; sans aucune prévision, « Aucune prévision disponible pour le
+  moment. ».
+- Widget : une seule marque sur le graphique, sur demain quand EDF l'a annoncé
+  rouge ou blanc. Les marques « Rouge prévu » se chevauchaient sur un téléphone
+  dès que deux rouges prévus étaient proches, et celle d'aujourd'hui mordait sur
+  les graduations ; les jours prévus restent lisibles sur la courbe et la liste.
+- Documentation : Gladys affiche les prix avec un point décimal (« 0.165 € »).
+  Limites du rendu de Gladys notées : graduations sans « % », barre flottante
+  qui peut masquer le bas du widget sur un téléphone.
 
 ## [0.1.0] - 2026-10-14
 

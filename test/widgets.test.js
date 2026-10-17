@@ -73,31 +73,57 @@ test('graphique : probabilités en % (entiers 0 à 100), axe ancré sur 0 et 100
 test('graphique : jour officiel rouge à 100 %, ancres toujours 0 et 100', () => {
   const p = seasonPayloads(49, RED_SCENARIO);
   Object.assign(p.today, { couleur: 'ROUGE', code: 3 });
+  Object.assign(p.tomorrow, { couleur: 'ROUGE', code: 3 });
   const d = buildTempoData(p.today, p.tomorrow, p.remaining, p.predictions, p.referenceDate);
   const [chart] = byType(buildForecastWidget(d, 'fr'), 'chart');
   assert.deepEqual(chart.series[1].points[0], { t: '2026-12-02', v: 100 });
   assert.deepEqual(chart.series[0].points[0], { t: '2026-12-02', v: 0 });
-  assert.deepEqual(chart.annotations[0], {
-    t: '2026-12-02',
-    value: 100,
-    label: { en: 'Red', fr: 'Rouge' },
-    color: 'danger',
-  });
+  assert.equal(chart.title.fr, 'Probabilité de rouge, en % (15 jours)', '% dans le titre');
+  // Une seule marque, sur demain : celle d'aujourd'hui mordait sur les graduations.
+  assert.deepEqual(chart.annotations, [
+    { t: '2026-12-03', value: 100, label: { en: 'Red', fr: 'Rouge' }, color: 'danger' },
+  ]);
 });
 
-test('graphique : rouge prévu marqué sur la courbe rouge, demain avant l’annonce', () => {
+// REGRESSION KO-2 (recette du 2026-10-17) : à 375 px, les étiquettes « Rouge
+// prévu » se chevauchaient dès que deux rouges prévus avaient moins de 5 jours
+// d'écart (8 marques au plus). Une seule marque désormais : jamais de chevauchement.
+test('graphique : une marque au plus, sur demain officiel, jamais sur un jour prévu', () => {
+  const cluster = { 2: 0.8, 3: 0.75, 4: 0.7, 5: 0.72, 6: 0.9, 7: 0.85, 8: 0.62, 9: 0.6, 12: 0.7 };
+  const p = seasonPayloads(49, cluster);
+  Object.assign(p.today, { couleur: 'BLANC', code: 2 });
+  Object.assign(p.tomorrow, { couleur: 'ROUGE', code: 3 });
+  const d = buildTempoData(p.today, p.tomorrow, p.remaining, p.predictions, p.referenceDate);
+  assert.ok(d.days.filter((day) => !day.official && day.color === 'rouge').length >= 8);
+  for (const language of ['fr', 'en']) {
+    const content = buildForecastWidget(d, language);
+    assert.deepEqual(validateWidgetContent(content), []);
+    const [chart] = byType(content, 'chart');
+    assert.deepEqual(chart.annotations, [
+      { t: '2026-12-03', value: 100, label: { en: 'Red', fr: 'Rouge' }, color: 'danger' },
+    ]);
+  }
+  // Demain officiel blanc : marque « Blanc » à 0 ; demain bleu : aucune marque.
+  Object.assign(p.tomorrow, { couleur: 'BLANC', code: 2 });
+  const white = buildTempoData(p.today, p.tomorrow, p.remaining, p.predictions, p.referenceDate);
+  const [whiteChart] = byType(buildForecastWidget(white, 'fr'), 'chart');
+  assert.deepEqual(whiteChart.annotations, [
+    { t: '2026-12-03', value: 0, label: { en: 'White', fr: 'Blanc' }, color: 'neutral' },
+  ]);
+  Object.assign(p.tomorrow, { couleur: 'BLEU', code: 1 });
+  const blue = buildTempoData(p.today, p.tomorrow, p.remaining, p.predictions, p.referenceDate);
+  assert.equal(byType(buildForecastWidget(blue, 'fr'), 'chart')[0].annotations, undefined);
+});
+
+test('graphique : demain avant l’annonce, aucune marque sur les rouges prévus', () => {
   const p = seasonPayloads(49, RED_SCENARIO);
   p.predictions.predictions[1].confirmed = false;
   const d = buildTempoData(p.today, TOMORROW_PENDING, p.remaining, p.predictions, p.referenceDate);
   const content = buildForecastWidget(d, 'fr');
   assert.deepEqual(validateWidgetContent(content), []);
   const [chart] = byType(content, 'chart');
-  assert.deepEqual(chart.annotations[0], {
-    t: '2026-12-07',
-    value: 72,
-    label: { en: 'Red forecast', fr: 'Rouge prévu' },
-    color: 'danger',
-  });
+  assert.equal(chart.annotations, undefined);
+  assert.equal(chart.series[1].points.find((pt) => pt.t === '2026-12-07').v, 72);
   assert.equal(byType(content, 'value')[1].label.fr, 'Demain (prévision)');
   const [status] = byType(content, 'status');
   assert.deepEqual([status.items[3].label, status.items[3].value], ['lun. 7 · J+5', 'Rouge 72 %']);
@@ -109,8 +135,8 @@ test('état vide : pas de graphique avant le 1er novembre, message court à la p
     const content = buildForecastWidget(data(), language, RECORDED_AT);
     assert.equal(byType(content, 'chart').length, 0, 'aucun graphique vide');
     assert.deepEqual(bodyTexts(content)[0].text, {
-      en: 'No red day possible before 1 November.',
-      fr: 'Pas de jour rouge possible avant le 1er novembre.',
+      en: 'No red day possible before 1 November.',
+      fr: 'Pas de jour rouge possible avant le 1er novembre.',
     });
   }
 });
@@ -141,6 +167,28 @@ test('état vide : même message du 1er avril au 31 octobre, graphique dès que 
     '2026-10-21',
   );
   assert.equal(byType(buildForecastWidget(l, 'fr'), 'chart').length, 1);
+});
+
+// REGRESSION N1 (recette du 2026-10-17) : le 17/10, l'horizon finit le dimanche
+// 1er novembre (Toussaint) : aucun rouge possible, le message et non un graphique plat.
+test('état vide : horizon qui finit le 1er novembre (dimanche, Toussaint), message', () => {
+  const p = seasonPayloads(3); // réponses du 14/10 décalées : horizon du 17/10 au 01/11
+  const d = buildTempoData(p.today, p.tomorrow, p.remaining, p.predictions, '2026-10-17');
+  assert.equal(d.days.at(-1).date, '2026-11-01');
+  const content = buildForecastWidget(d, 'fr');
+  assert.equal(byType(content, 'chart').length, 0);
+  assert.equal(bodyTexts(content)[0].text.fr, 'Pas de jour rouge possible avant le 1er novembre.');
+  // Le 18/10, l'horizon atteint le lundi 2 novembre : le graphique revient.
+  const next = seasonPayloads(4);
+  const n = buildTempoData(
+    next.today,
+    next.tomorrow,
+    next.remaining,
+    next.predictions,
+    '2026-10-18',
+  );
+  assert.equal(n.days.at(-1).date, '2026-11-02');
+  assert.equal(byType(buildForecastWidget(n, 'fr'), 'chart').length, 1);
 });
 
 test('état vide générique : aucune donnée de prévision', () => {

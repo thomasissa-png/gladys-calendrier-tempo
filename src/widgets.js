@@ -33,16 +33,11 @@ const TTL_SECONDS = 1800;
 const STATUS_OFFSETS = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
 const MAX_STATUS_ITEMS = 10;
 const PERCENT = 100;
-const MAX_ANNOTATIONS = 8;
+// Une seule marque, pour demain (voir redChart) : deux marques peuvent se chevaucher.
+const ANNOTATED_OFFSET = 1;
 const ANNOTATION_LABELS = {
-  [COLOR_ROUGE]: {
-    official: { en: 'Red', fr: 'Rouge' },
-    forecast: { en: 'Red forecast', fr: 'Rouge prévu' },
-  },
-  [COLOR_BLANC]: {
-    official: { en: 'White', fr: 'Blanc' },
-    forecast: { en: 'White forecast', fr: 'Blanc prévu' },
-  },
+  [COLOR_ROUGE]: { en: 'Red', fr: 'Rouge' },
+  [COLOR_BLANC]: { en: 'White', fr: 'Blanc' },
 };
 
 const COLOR_STYLE = {
@@ -111,8 +106,8 @@ function statusItem(day, offset, language) {
 
 // Messages à la place du graphique quand il n'aurait rien à montrer.
 const NO_RED_BEFORE_NOVEMBER = {
-  en: 'No red day possible before 1 November.',
-  fr: 'Pas de jour rouge possible avant le 1er novembre.',
+  en: 'No red day possible before 1 November.',
+  fr: 'Pas de jour rouge possible avant le 1er novembre.',
 };
 const NO_FORECAST = {
   en: 'No forecast available at the moment.',
@@ -133,8 +128,19 @@ const bodyText = (text) => ({ type: 'text', variant: 'body', text });
  * maximum des séries : avec p et 100 - p, il suffit d'un jour à 0 % ou à 100 %
  * pour avoir exactement 0 à 100. C'est toujours le cas en saison : aujourd'hui
  * est officiel (0 ou 100 %) et 16 jours comptent toujours un week-end (0 %).
- * Hors saison des rouges (aucun jour de l'horizon entre le 1er novembre et le
- * 31 mars) ou sans aucune probabilité : un message court à la place.
+ * Quand aucun jour de l'horizon ne peut être rouge (du 1er novembre au 31 mars,
+ * hors week-ends et jours fériés : le 17/10, l'horizon finit le dimanche 1er
+ * novembre, Toussaint) ou sans aucune probabilité : un message court à la place.
+ * Graduations de l'axe : Gladys affiche « 50.00 », sans unité ni format (le
+ * contrat des widgets n'a ni format ni suffixe d'axe, `unit` n'y apparaît pas) ;
+ * le « % » est donc dans le titre.
+ *
+ * Une seule marque, sur demain quand sa couleur officielle est rouge ou blanc.
+ * REGRESSION KO-2 (recette du 2026-10-17) : jusqu'à 8 marques (rouges prévus,
+ * blancs) se chevauchaient à 375 px (un jour y fait environ 15 px, « Rouge
+ * prévu » environ 70 px), et celle d'aujourd'hui, posée sur l'axe, mordait sur
+ * ses graduations. Les jours prévus restent lisibles sur la courbe et la liste,
+ * aujourd'hui et demain dans les tuiles.
  */
 function redChart(data) {
   if (data.days.length > 0 && !data.days.some((day) => redPossible(day.date))) {
@@ -147,21 +153,25 @@ function redChart(data) {
   if (values.length === 0) {
     return bodyText(NO_FORECAST);
   }
-  // Jours rouges d'abord, puis blancs (8 marques au plus), sur la courbe rouge.
   const redOf = new Map(values.map(({ t, red }) => [t, red]));
-  const marked = [COLOR_ROUGE, COLOR_BLANC].flatMap((color) =>
-    data.days.filter((day) => day.color === color && redOf.has(day.date)),
-  );
-  const annotations = marked.slice(0, MAX_ANNOTATIONS).map((day) => ({
-    t: day.date,
-    value: redOf.get(day.date),
-    label: ANNOTATION_LABELS[day.color][day.official ? 'official' : 'forecast'],
-    color: styleOf(day.color).color,
-  }));
+  const annotations = data.days
+    .filter(
+      (day) =>
+        day.offset === ANNOTATED_OFFSET &&
+        day.official &&
+        day.color in ANNOTATION_LABELS &&
+        redOf.has(day.date),
+    )
+    .map((day) => ({
+      t: day.date,
+      value: redOf.get(day.date),
+      label: ANNOTATION_LABELS[day.color],
+      color: styleOf(day.color).color,
+    }));
   return {
     type: 'chart',
     chart_type: 'area',
-    title: { en: 'Chance of a red day (15 days)', fr: 'Probabilité de jour rouge (15 jours)' },
+    title: { en: 'Chance of red, in % (15 days)', fr: 'Probabilité de rouge, en % (15 jours)' },
     unit: '%',
     series: [
       {

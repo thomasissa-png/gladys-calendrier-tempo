@@ -73,10 +73,51 @@ export function periodFor(parisHour) {
     : PERIOD_OFF_PEAK;
 }
 
-/** R1 : un jour rouge n'est possible que du 1er novembre au 31 mars. */
+// Jours fériés nationaux à date fixe (MM-JJ).
+const FIXED_HOLIDAYS = ['01-01', '05-01', '05-08', '07-14', '08-15', '11-01', '11-11', '12-25'];
+// Jours fériés mobiles, en jours après Pâques : lundi de Pâques, Ascension, lundi de Pentecôte.
+const EASTER_HOLIDAY_OFFSETS = [1, 39, 50];
+
+/** Dimanche de Pâques (calendrier grégorien, algorithme de Meeus), date ISO. */
+export function easterSunday(year) {
+  const a = year % 19;
+  const b = Math.floor(year / 100);
+  const c = year % 100;
+  const d = Math.floor(b / 4);
+  const e = b % 4;
+  const f = Math.floor((b + 8) / 25);
+  const g = Math.floor((b - f + 1) / 3);
+  const h = (19 * a + b - d - g + 15) % 30;
+  const i = Math.floor(c / 4);
+  const k = c % 4;
+  const l = (32 + 2 * e + 2 * i - h - k) % 7;
+  const m = Math.floor((a + 11 * h + 22 * l) / 451);
+  const month = Math.floor((h + l - 7 * m + 114) / 31);
+  const day = ((h + l - 7 * m + 114) % 31) + 1;
+  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
+/** Jour férié national en France (métropole), dont les fêtes mobiles liées à Pâques. */
+export function isFrenchHoliday(isoDate) {
+  if (FIXED_HOLIDAYS.includes(isoDate.slice(5, 10))) {
+    return true;
+  }
+  const easter = easterSunday(Number(isoDate.slice(0, 4)));
+  return EASTER_HOLIDAY_OFFSETS.some((offset) => addDays(easter, offset) === isoDate);
+}
+
+/**
+ * Règles d'EDF : un jour rouge n'est possible que du 1er novembre au 31 mars (R1),
+ * jamais un samedi, un dimanche ni un jour férié (R2). Le 1er novembre (Toussaint)
+ * n'est donc jamais rouge.
+ */
 export function redPossible(isoDate) {
   const month = Number(isoDate.slice(5, 7));
-  return month >= 11 || month <= 3;
+  if (month > 3 && month < 11) {
+    return false;
+  }
+  const weekday = new Date(`${isoDate.slice(0, 10)}T12:00:00Z`).getUTCDay();
+  return weekday !== 0 && weekday !== 6 && !isFrenchHoliday(isoDate);
 }
 
 /** Fiabilité d'un jour selon qu'il est officiel et son éloignement. */

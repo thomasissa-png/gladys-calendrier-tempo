@@ -273,17 +273,20 @@ export function createTempoIntegration(gladys, options = {}) {
   }
 
   /**
-   * Grille de prix d'une lecture : celle de /api/today « ok ». Une réponse « ok »
-   * sans grille (ancienne version de l'API, copie en cache) rend le prix inconnu ;
-   * une réponse sans couleur (attente, panne) garde la dernière grille, 24 h au plus.
+   * Grille de prix d'une lecture : celle de /api/today, quand elle y figure.
+   * REGRESSION KO-1 (recette du 2026-10-17) : une réponse « ok » sans grille
+   * (copie de secours ancienne, retour arrière du site, réponse partielle)
+   * effaçait la grille gardée ; le prix devenait inconnu, rien n'était publié et
+   * Gladys gardait un prix faux (HC à 14 h un jour rouge). Toute réponse sans
+   * grille garde désormais la dernière grille lue, 24 h au plus (la grille ne
+   * change qu'à sa date d'effet), puis le prix devient inconnu.
    */
   function tariffsFrom(todayPayload) {
-    if (todayPayload?.status !== 'ok') {
-      return lastTariffs();
-    }
     const grid = parseTariffs(todayPayload);
-    state.tariffs = grid ? { grid, at: now() } : null;
-    return grid;
+    if (grid) {
+      state.tariffs = { grid, at: now() };
+    }
+    return grid ?? lastTariffs();
   }
 
   /** Données reconstruites sans appel à l'API : couleurs déjà lues et réponses gardées. */

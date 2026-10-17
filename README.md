@@ -50,18 +50,18 @@ Les mises à jour s'installent en un clic depuis Gladys.
 
 Les couleurs sont publiées en minuscules (`bleu`, `blanc`, `rouge`, `inconnue`) : dans vos scènes, comparez avec ces valeurs. La journée Tempo va de 6 h à 6 h : pour piloter un chauffage, utilisez **Couleur actuelle**, qui garde la couleur de la veille jusqu'à 6 h.
 
-Les prix viennent de la grille publiée par l'API (`/api/today`, champ `tarifs`) : aucun prix n'est écrit dans l'intégration. Sans grille dans la réponse, le prix est inconnu et n'est pas publié. Gladys affiche ces valeurs en euros avec 3 chiffres significatifs (0,165 €) ; la valeur enregistrée, utilisable dans les scènes, est exacte (0,1654).
+Les prix viennent de la grille publiée par l'API (`/api/today`, champ `tarifs`) : aucun prix n'est écrit dans l'intégration. Une réponse sans grille garde la dernière grille lue, 24 h au plus ; au-delà, ou si la couleur de la journée Tempo en cours n'est pas connue, le prix est inconnu et n'est pas publié. Gladys affiche ces valeurs en euros avec 3 chiffres significatifs et un point décimal, même en français (« 0.165 € ») ; la valeur enregistrée, utilisable dans les scènes, est exacte (0.1654).
 
 Les prévisions J+6 à J+15 sont désactivées par défaut : tout l'horizon est déjà dans le widget et dans « Jours rouges sur 15 jours ». Pour les publier, activez l'option dans l'onglet **Configuration**, puis mettez à jour l'appareil depuis l'onglet **Découverte**.
 
 ## Le widget « Prévisions Tempo »
 
 - Quatre tuiles : aujourd'hui, demain (couleur officielle, ou prévision signalée comme telle avant l'annonce), « Rouges » et « Blancs » (jours restants dans la saison).
-- Un graphique de la probabilité de jour rouge, d'aujourd'hui à J+15, en % de 0 à 100 : aire « Rouge » et aire « Bleu ou blanc », jours rouges et blancs marqués. Du 1er avril au 31 octobre, quand aucun rouge n'est possible sur l'horizon, il laisse la place au message « Pas de jour rouge possible avant le 1er novembre. ».
+- Un graphique de la probabilité de jour rouge, d'aujourd'hui à J+15, en % de 0 à 100 : aire « Rouge » et aire « Bleu ou blanc », demain marqué quand EDF l'a annoncé rouge ou blanc. Quand aucun jour de l'horizon ne peut être rouge (un rouge n'est possible que du 1er novembre au 31 mars, hors week-ends et jours fériés), il laisse la place au message « Pas de jour rouge possible avant le 1er novembre. ».
 - Une liste : « Prix actuel » (par exemple « 0,1654 €/kWh (HP, bleu) », si l'API publie la grille de prix), puis J+2 à J+10 (J+11 sans prix) avec la couleur prévue et sa probabilité, « tendance » au-delà de J+5.
 - Un lien vers le [calendrier complet](https://www.calendrier-tempo.fr/calendrier).
 
-Gladys impose ses propres couleurs de widget : le bleu Tempo s'affiche en bleu « information », le blanc en gris neutre, le rouge en rouge « alerte ».
+Gladys impose ses propres couleurs de widget : le bleu Tempo s'affiche en bleu « information », le blanc en gris neutre, le rouge en rouge « alerte ». Limites du rendu de Gladys, hors de portée de l'intégration : les graduations du graphique s'affichent « 50.00 », sans « % » (le contrat des widgets n'a ni format ni unité d'axe : l'unité est dans le titre) ; sur un téléphone, la barre flottante du tableau de bord peut masquer les dernières lignes du widget (le contrat n'a pas de marge : faites défiler la page).
 
 ## Déclencheurs de scène
 
@@ -85,7 +85,7 @@ Pour une scène sur une fonctionnalité de l'appareil (par exemple « Couleur ac
 
 Heure de Paris, quel que soit le fuseau de votre installation : toutes les 30 minutes (4 petites requêtes), à 0 h 05 pour le changement de jour, et à 11 h 35 pour la couleur de demain annoncée par EDF. Ces deux rendez-vous sont décalés de 0 à 120 secondes, une valeur tirée au hasard une fois pour toutes à l'installation, pour ne pas faire arriver toutes les installations en même temps. À minuit, à 6 h et à 22 h, le jour, la couleur actuelle et la période sont recalculés sans appel à l'API.
 
-Si les prévisions ou les jours restants ne répondent pas, les dernières valeurs reçues sont conservées 24 h au plus. Si les couleurs officielles ne répondent pas, l'écran Configuration de l'intégration affiche « déconnecté » ; les couleurs officielles déjà lues restent affichées pour leur date, y compris après un redémarrage (elles sont gardées dans `/data`), et seule une couleur jamais lue passe à `inconnue`. Au redémarrage, rien n'est publié avant la première lecture : les couleurs ne passent jamais par `inconnue`. Après un échec, une seule nouvelle tentative a lieu 5 minutes plus tard, puis le cycle de 30 minutes reprend, sans relance en rafale.
+Si les prévisions ou les jours restants ne répondent pas, les dernières valeurs reçues sont conservées 24 h au plus. Si les couleurs officielles ne répondent pas, l'écran Configuration de l'intégration affiche « déconnecté » ; les couleurs officielles déjà lues restent affichées pour leur date, y compris après un redémarrage (elles sont gardées dans `/data`), et seule une couleur jamais lue passe à `inconnue`. Les prix, eux, ne peuvent pas passer à « inconnu » (Gladys n'a pas d'état inconnu pour une valeur en euros) : sans grille lue depuis 24 h ou sans couleur du jour connue, ils ne sont plus publiés et gardent leur dernière valeur, datée. Dans une scène sur un prix, ajoutez la condition « Couleur actuelle différente de `inconnue` ». Au redémarrage, rien n'est publié avant la première lecture : les couleurs ne passent jamais par `inconnue`. Après un échec, une seule nouvelle tentative a lieu 5 minutes plus tard, puis le cycle de 30 minutes reprend, sans relance en rafale.
 
 L'intégration n'envoie aucune donnée personnelle : de simples lectures de l'API, avec le User-Agent `CalendrierTempo-Gladys/<version>`.
 

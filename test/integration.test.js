@@ -19,6 +19,7 @@ import {
   fakeClock,
   memoryStore,
   realPayloads,
+  seasonPayloads,
   withTariffs,
 } from './helpers.js';
 
@@ -513,4 +514,37 @@ test('prix du kWh : grille gardée dans /data, reprise pendant une panne (24 h a
   await third.tempo.start();
   assert.equal(last(third.gladys, FEATURE.PRICE), undefined, 'grille de plus de 24 h : inconnue');
   third.tempo.stop();
+});
+
+// REGRESSION KO-1 (recette du 2026-10-17) : une réponse /api/today « ok » sans
+// grille effaçait la grille gardée ; un jour rouge à 14 h, l'appareil restait au
+// prix HC publié avant (0,1615) au lieu du prix HP (0,7295).
+test('prix du kWh : réponse sans grille, la dernière grille lue sert 24 h au plus', async () => {
+  const p = seasonPayloads(35); // SCÉNARIO : mercredi 18 novembre 2026
+  assert.equal(p.referenceDate, '2026-11-18');
+  Object.assign(p.today, { couleur: 'ROUGE', code: 3 });
+  const payloads = { ...p, today: withTariffs(p.today) };
+  const store = memoryStore();
+  const readAt = parisWallTimeToInstant('2026-11-18', 9, 0);
+  const { tempo, clock, gladys } = await setup({ payloads, store, start: readAt });
+  await tempo.start();
+  assert.equal(last(gladys, FEATURE.PRICE), 0.7295, 'HP rouge');
+  const { tarifs, tarif, ...noGrid } = payloads.today;
+  assert.ok(tarifs && tarif);
+  payloads.today = noGrid;
+  clock.set(parisWallTimeToInstant('2026-11-18', 14, 0));
+  await tempo.refresh();
+  assert.equal(last(gladys, FEATURE.PRICE), 0.7295, '14 h : toujours HP rouge');
+  assert.equal(last(gladys, FEATURE.DAY_PEAK_PRICE), 0.7295);
+  assert.equal(last(gladys, FEATURE.DAY_OFF_PEAK_PRICE), 0.1615);
+  assert.equal(store.saved.tariffs.grid.couleurs.rouge.hp, 0.7295, 'grille gardée dans /data');
+  assert.equal(store.saved.tariffs.at, readAt, 'datée de sa dernière lecture, pas de la réponse');
+  clock.set(parisWallTimeToInstant('2026-11-18', 22, 0));
+  await tempo.tick();
+  assert.equal(last(gladys, FEATURE.PRICE), 0.1615, '22 h : HC rouge, grille gardée');
+  // Plus de 24 h après la dernière grille lue : prix inconnu, plus rien de publié.
+  clock.set(readAt + STALE_PAYLOAD_MAX_AGE_MS + 60_000);
+  await tempo.refresh();
+  assert.equal(tempo.data.tariffs, null);
+  tempo.stop();
 });
