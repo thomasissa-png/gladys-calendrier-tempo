@@ -3,8 +3,8 @@
   "type": "device",
   "name": "Calendrier Tempo EDF",
   "description": {
-    "en": "EDF Tempo colors, forecasts up to 15 days, days left, widget and scene triggers.",
-    "fr": "Couleurs Tempo EDF, prévisions jusqu'à 15 jours, jours restants, widget et scènes."
+    "en": "EDF Tempo colors, kWh prices, forecasts up to 15 days, days left, widget and scene triggers.",
+    "fr": "Couleurs Tempo EDF, prix du kWh, prévisions jusqu'à 15 jours, jours restants, widget et scènes."
   },
   "version": "0.2.0",
   "docker_image": "ghcr.io/thomasissa-png/gladys-calendrier-tempo:0.2.0",
