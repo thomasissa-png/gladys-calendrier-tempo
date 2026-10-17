@@ -10,6 +10,37 @@ la note de la publication GitHub de cette version.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-17
+
+Demandes d'utilisateurs du forum Gladys.
+
+### Ajouts
+
+- Prix du kWh, lu dans la grille publiée par l'API de calendrier-tempo.fr
+  (`/api/today`, champ `tarifs`) : heures pleines de 6 h à 22 h, heures creuses
+  de 22 h à 6 h, couleur de la journée Tempo en cours (celle de la veille entre
+  0 h et 6 h). Trois fonctionnalités de l'appareil, en euros (catégorie
+  « Devise » de Gladys) : « Prix actuel du kWh », « Prix HP du jour », « Prix HC
+  du jour ». Après la mise à jour, mettez à jour l'appareil depuis l'onglet
+  Découverte pour les voir.
+- Widget : ligne « Prix actuel : 0,1654 €/kWh (HP, bleu) » en tête de la liste
+  (J+2 à J+10 ensuite), mise à jour à 6 h et à 22 h.
+- Aucun prix n'est écrit dans l'intégration : sans grille dans la réponse de
+  l'API, le prix reste inconnu (rien d'affiché, rien de publié). La dernière
+  grille lue est gardée 24 h au plus pendant une panne.
+
+### Corrections
+
+- Widget : le graphique « Probabilité de jour rouge » affichait une échelle de
+  0 à 2 (toutes les valeurs à 0 en octobre) ou de 0 à 150. Les valeurs étaient
+  bien en %, mais Gladys calait l'axe sur les données. Le graphique montre
+  désormais deux aires, « Bleu ou blanc » et « Rouge » (en rouge), sur un axe de
+  0 à 100 %.
+- Widget : quand aucun jour rouge n'est possible sur les 15 jours (du 1er avril
+  au 31 octobre), le graphique vide laisse la place au message « Pas de jour
+  rouge possible avant le 1er novembre. » ; sans aucune prévision, « Aucune
+  prévision disponible pour le moment. ».
+
 ## [0.1.0] - 2026-10-14
 
 ### Ajouts
@@ -45,5 +76,6 @@ la note de la publication GitHub de cette version.
 - Une réponse facultative qui n'est pas un objet JSON n'invalide plus toute la
   lecture.
 
-[Unreleased]: https://github.com/thomasissa-png/gladys-calendrier-tempo/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/thomasissa-png/gladys-calendrier-tempo/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/thomasissa-png/gladys-calendrier-tempo/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/thomasissa-png/gladys-calendrier-tempo/releases/tag/v0.1.0

@@ -4,16 +4,26 @@
 // Contenu déclaratif, dans le budget d'une carte (8 composants, 1 focal,
 // 6 tuiles, 1 liste d'état, 2 textes) :
 //   - 4 tuiles : aujourd'hui, demain, rouges restants, blancs restants ;
-//   - 1 graphique (focal) : probabilité de rouge d'aujourd'hui à J+15 ;
-//   - 1 liste d'état : J+2 à J+11, couleur prévue et sa probabilité ;
+//   - 1 graphique (focal) : probabilité de rouge d'aujourd'hui à J+15, en %,
+//     remplacé par un message court quand il n'aurait rien à montrer ;
+//   - 1 liste d'état : prix actuel du kWh (s'il est connu), puis J+2 à J+11
+//     (J+10 avec le prix), couleur prévue et sa probabilité ;
 //   - 1 légende (source, licence) et 1 bouton vers le calendrier du site.
 // Les couleurs du widget sont une énumération de Gladys : bleu → info,
 // blanc → neutral, rouge → danger.
 // -----------------------------------------------------------------------------
 
 import { WIDGET_COLORS } from '@gladysassistant/integration-sdk';
-import { CALENDAR_URL } from './constants.js';
-import { COLOR_BLANC, COLOR_BLEU, COLOR_ROUGE, dayForOffset, probability } from './tempo.js';
+import { CALENDAR_URL, PERIOD_PEAK } from './constants.js';
+import { currentPrice } from './tariffs.js';
+import {
+  COLOR_BLANC,
+  COLOR_BLEU,
+  COLOR_ROUGE,
+  dayForOffset,
+  probability,
+  redPossible,
+} from './tempo.js';
 
 export const FORECAST_WIDGET = 'previsions_tempo';
 
@@ -21,6 +31,8 @@ export const FORECAST_WIDGET = 'previsions_tempo';
 // demande en plus un rafraîchissement immédiat (requestWidgetRefresh).
 const TTL_SECONDS = 1800;
 const STATUS_OFFSETS = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
+const MAX_STATUS_ITEMS = 10;
+const PERCENT = 100;
 const MAX_ANNOTATIONS = 8;
 const ANNOTATION_LABELS = {
   [COLOR_ROUGE]: {
@@ -97,28 +109,95 @@ function statusItem(day, offset, language) {
   return { label, value, color: style.color };
 }
 
+// Messages à la place du graphique quand il n'aurait rien à montrer.
+const NO_RED_BEFORE_NOVEMBER = {
+  en: 'No red day possible before 1 November.',
+  fr: 'Pas de jour rouge possible avant le 1er novembre.',
+};
+const NO_FORECAST = {
+  en: 'No forecast available at the moment.',
+  fr: 'Aucune prévision disponible pour le moment.',
+};
+
+const bodyText = (text) => ({ type: 'text', variant: 'body', text });
+
+/**
+ * Graphique du risque de rouge, en % sur un axe de 0 à 100 : deux aires par
+ * jour, « Bleu ou blanc » (100 - p, 1re couleur de Gladys : bleu) et « Rouge »
+ * (p, 2e couleur : rouge).
+ * Cause de l'ancienne échelle « 0 à 2 » : les valeurs étaient bien en % (p x 100),
+ * mais le contrat des widgets n'a pas de bornes d'axe et Gladys (ApexCharts) cale
+ * l'axe sur les données : 0 à 2 quand toutes valent 0 (octobre), 0 à 80 pour un
+ * pic à 72 %, 0 à 150 pour un pic à 100 % en barres (une graduation de plus
+ * quand le maximum tombe sur une graduation). En courbe, l'axe va du minimum au
+ * maximum des séries : avec p et 100 - p, il suffit d'un jour à 0 % ou à 100 %
+ * pour avoir exactement 0 à 100. C'est toujours le cas en saison : aujourd'hui
+ * est officiel (0 ou 100 %) et 16 jours comptent toujours un week-end (0 %).
+ * Hors saison des rouges (aucun jour de l'horizon entre le 1er novembre et le
+ * 31 mars) ou sans aucune probabilité : un message court à la place.
+ */
 function redChart(data) {
-  const points = data.days
-    .map((day) => ({ t: day.date, v: probability(day, COLOR_ROUGE) }))
-    .filter((point) => point.v !== null)
-    .map((point) => ({ t: point.t, v: Math.round(point.v * 100) }));
-  // Jours rouges d'abord, puis blancs (8 marques au plus).
+  if (data.days.length > 0 && !data.days.some((day) => redPossible(day.date))) {
+    return bodyText(NO_RED_BEFORE_NOVEMBER);
+  }
+  const values = data.days
+    .map((day) => ({ t: day.date, p: probability(day, COLOR_ROUGE) }))
+    .filter((point) => point.p !== null)
+    .map(({ t, p }) => ({ t, red: Math.round(Math.min(Math.max(p, 0), 1) * PERCENT) }));
+  if (values.length === 0) {
+    return bodyText(NO_FORECAST);
+  }
+  // Jours rouges d'abord, puis blancs (8 marques au plus), sur la courbe rouge.
+  const redOf = new Map(values.map(({ t, red }) => [t, red]));
   const marked = [COLOR_ROUGE, COLOR_BLANC].flatMap((color) =>
-    data.days.filter((day) => day.color === color),
+    data.days.filter((day) => day.color === color && redOf.has(day.date)),
   );
   const annotations = marked.slice(0, MAX_ANNOTATIONS).map((day) => ({
     t: day.date,
-    value: Math.round((probability(day, COLOR_ROUGE) ?? 0) * 100),
+    value: redOf.get(day.date),
     label: ANNOTATION_LABELS[day.color][day.official ? 'official' : 'forecast'],
     color: styleOf(day.color).color,
   }));
   return {
     type: 'chart',
-    chart_type: 'bar',
+    chart_type: 'area',
     title: { en: 'Chance of a red day (15 days)', fr: 'Probabilité de jour rouge (15 jours)' },
     unit: '%',
-    series: [{ name: { en: 'Red', fr: 'Rouge' }, points }],
+    series: [
+      {
+        name: { en: 'Blue or white', fr: 'Bleu ou blanc' },
+        points: values.map(({ t, red }) => ({ t, v: PERCENT - red })),
+      },
+      { name: { en: 'Red', fr: 'Rouge' }, points: values.map(({ t, red }) => ({ t, v: red })) },
+    ],
     ...(annotations.length ? { annotations } : {}),
+  };
+}
+
+// « 0,1654 €/kWh (HP, bleu) » / « €0.1654/kWh (peak, blue) ».
+function formatPrice({ price, period, color }, language) {
+  const french = isFrench(language);
+  const amount = new Intl.NumberFormat(french ? 'fr-FR' : 'en-GB', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 4,
+  }).format(price);
+  const colorName = pick(styleOf(color).label, language).toLowerCase();
+  if (french) {
+    return `${amount} €/kWh (${period === PERIOD_PEAK ? 'HP' : 'HC'}, ${colorName})`;
+  }
+  return `€${amount}/kWh (${period === PERIOD_PEAK ? 'peak' : 'off-peak'}, ${colorName})`;
+}
+
+/** Ligne « Prix actuel » de la liste d'état, null si le prix n'est pas connu. */
+function priceItem(data, now, language) {
+  const current = currentPrice(data, now);
+  if (current.price === null) {
+    return null;
+  }
+  return {
+    label: isFrench(language) ? 'Prix actuel' : 'Current price',
+    value: formatPrice(current, language),
+    color: styleOf(current.color).color,
   };
 }
 
@@ -143,8 +222,9 @@ const CALENDAR_BUTTON = {
  * Contenu du widget pour les dernières données (null : aucune lecture réussie).
  * @param {object|null} data
  * @param {string} language - langue de l'utilisateur qui regarde ('fr', 'en'...)
+ * @param {number} now - instant de l'affichage (prix HP/HC en cours)
  */
-export function buildForecastWidget(data, language = 'fr') {
+export function buildForecastWidget(data, language = 'fr', now = Date.now()) {
   if (!data) {
     return {
       ttl_seconds: 60,
@@ -172,9 +252,14 @@ export function buildForecastWidget(data, language = 'fr') {
       redChart(data),
       {
         type: 'status',
-        items: STATUS_OFFSETS.map((offset) =>
-          statusItem(dayForOffset(data, offset), offset, language),
-        ),
+        items: [
+          priceItem(data, now, language),
+          ...STATUS_OFFSETS.map((offset) =>
+            statusItem(dayForOffset(data, offset), offset, language),
+          ),
+        ]
+          .filter(Boolean)
+          .slice(0, MAX_STATUS_ITEMS),
       },
       CAPTION,
       CALENDAR_BUTTON,
@@ -183,11 +268,11 @@ export function buildForecastWidget(data, language = 'fr') {
 }
 
 /** Widgets déclarés dans le manifeste, par clé. `getData()` rend les dernières données. */
-export function createWidgets(getData) {
+export function createWidgets(getData, now = () => Date.now()) {
   return {
     [FORECAST_WIDGET]: {
       async get(_gladys, { language }) {
-        return buildForecastWidget(getData(), language);
+        return buildForecastWidget(getData(), language, now());
       },
     },
   };

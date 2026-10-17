@@ -6,8 +6,8 @@
     "en": "EDF Tempo colors, forecasts up to 15 days, days left, widget and scene triggers.",
     "fr": "Couleurs Tempo EDF, prévisions jusqu'à 15 jours, jours restants, widget et scènes."
   },
-  "version": "0.1.0",
-  "docker_image": "ghcr.io/thomasissa-png/gladys-calendrier-tempo:0.1.0",
+  "version": "0.2.0",
+  "docker_image": "ghcr.io/thomasissa-png/gladys-calendrier-tempo:0.2.0",
   "gladys_version": ">=5.1.0",
   "cover_image": "https://raw.githubusercontent.com/thomasissa-png/gladys-calendrier-tempo/main/cover.png",
   "categories": ["energy"],
@@ -51,8 +51,8 @@
       "key": "previsions_tempo",
       "label": { "en": "Tempo forecasts", "fr": "Prévisions Tempo" },
       "description": {
-        "en": "Today, tomorrow, days left and the chance of a red day over 15 days.",
-        "fr": "Aujourd'hui, demain, jours restants et probabilité de jour rouge sur 15 jours."
+        "en": "Today, tomorrow, days left, current kWh price and the chance of a red day over 15 days.",
+        "fr": "Aujourd'hui, demain, jours restants, prix actuel du kWh et probabilité de jour rouge sur 15 jours."
       },
       "icon": "zap"
     }

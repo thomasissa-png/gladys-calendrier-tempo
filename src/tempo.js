@@ -73,6 +73,12 @@ export function periodFor(parisHour) {
     : PERIOD_OFF_PEAK;
 }
 
+/** R1 : un jour rouge n'est possible que du 1er novembre au 31 mars. */
+export function redPossible(isoDate) {
+  const month = Number(isoDate.slice(5, 7));
+  return month >= 11 || month <= 3;
+}
+
 /** Fiabilité d'un jour selon qu'il est officiel et son éloignement. */
 export function fiabiliteFor(offset, official) {
   if (official) {

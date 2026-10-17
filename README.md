@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/thomasissa-png/gladys-calendrier-tempo/actions/workflows/ci.yml/badge.svg)](https://github.com/thomasissa-png/gladys-calendrier-tempo/actions/workflows/ci.yml)
 
-Intégration Gladys Assistant qui ajoute la **couleur Tempo EDF** du jour et de demain, les **prévisions jusqu'à 15 jours**, le prochain jour rouge et blanc, les jours rouges et blancs restants dans la saison, un widget de tableau de bord « Prévisions Tempo » et trois déclencheurs de scène.
+Intégration Gladys Assistant qui ajoute la **couleur Tempo EDF** du jour et de demain, les **prévisions jusqu'à 15 jours**, le prochain jour rouge et blanc, les jours rouges et blancs restants dans la saison, le prix du kWh en cours, un widget de tableau de bord « Prévisions Tempo » et trois déclencheurs de scène.
 
 Les données viennent de l'[API publique et gratuite de calendrier-tempo.fr](https://www.calendrier-tempo.fr/api-tempo) : aucun compte, aucune clé, rien à configurer.
 
@@ -37,6 +37,8 @@ Les mises à jour s'installent en un clic depuis Gladys.
 | Aujourd'hui (officielle)          | `bleu`, `blanc` ou `rouge`                                                                    | officielle                          |
 | Couleur actuelle                  | couleur qui s'applique maintenant : celle de la veille jusqu'à 6 h                            | officielle                          |
 | Période tarifaire                 | `hp` (heures pleines, 6 h à 22 h) ou `hc` (heures creuses), heure de Paris                    |                                     |
+| Prix actuel du kWh                | prix en euros TTC de la couleur et de la période en cours (veille jusqu'à 6 h)                | grille publiée par l'API            |
+| Prix HP du jour, Prix HC du jour  | prix en euros TTC des heures pleines et creuses de la journée Tempo en cours                  | idem                                |
 | Demain (officielle)               | `bleu`, `blanc` ou `rouge`, `inconnue` tant qu'EDF n'a pas annoncé                            | officielle                          |
 | Prévision J+2 à Prévision J+5     | couleur prévue dans 2, 3, 4 ou 5 jours                                                        | fiable                              |
 | Prévision J+6 à J+15 (indicative) | couleur prévue dans 6 à 15 jours, **seulement si l'option est activée**                       | indicative                          |
@@ -48,13 +50,15 @@ Les mises à jour s'installent en un clic depuis Gladys.
 
 Les couleurs sont publiées en minuscules (`bleu`, `blanc`, `rouge`, `inconnue`) : dans vos scènes, comparez avec ces valeurs. La journée Tempo va de 6 h à 6 h : pour piloter un chauffage, utilisez **Couleur actuelle**, qui garde la couleur de la veille jusqu'à 6 h.
 
+Les prix viennent de la grille publiée par l'API (`/api/today`, champ `tarifs`) : aucun prix n'est écrit dans l'intégration. Sans grille dans la réponse, le prix est inconnu et n'est pas publié. Gladys affiche ces valeurs en euros avec 3 chiffres significatifs (0,165 €) ; la valeur enregistrée, utilisable dans les scènes, est exacte (0,1654).
+
 Les prévisions J+6 à J+15 sont désactivées par défaut : tout l'horizon est déjà dans le widget et dans « Jours rouges sur 15 jours ». Pour les publier, activez l'option dans l'onglet **Configuration**, puis mettez à jour l'appareil depuis l'onglet **Découverte**.
 
 ## Le widget « Prévisions Tempo »
 
 - Quatre tuiles : aujourd'hui, demain (couleur officielle, ou prévision signalée comme telle avant l'annonce), « Rouges » et « Blancs » (jours restants dans la saison).
-- Un graphique de la probabilité de jour rouge, d'aujourd'hui à J+15, avec les jours rouges marqués.
-- La liste de J+2 à J+11 : couleur prévue et sa probabilité, « tendance » au-delà de J+5.
+- Un graphique de la probabilité de jour rouge, d'aujourd'hui à J+15, en % de 0 à 100 : aire « Rouge » et aire « Bleu ou blanc », jours rouges et blancs marqués. Du 1er avril au 31 octobre, quand aucun rouge n'est possible sur l'horizon, il laisse la place au message « Pas de jour rouge possible avant le 1er novembre. ».
+- Une liste : « Prix actuel » (par exemple « 0,1654 €/kWh (HP, bleu) », si l'API publie la grille de prix), puis J+2 à J+10 (J+11 sans prix) avec la couleur prévue et sa probabilité, « tendance » au-delà de J+5.
 - Un lien vers le [calendrier complet](https://www.calendrier-tempo.fr/calendrier).
 
 Gladys impose ses propres couleurs de widget : le bleu Tempo s'affiche en bleu « information », le blanc en gris neutre, le rouge en rouge « alerte ».
@@ -110,7 +114,7 @@ Données sous licence CC BY 4.0 (source : [calendrier-tempo.fr](https://www.cale
 
 ## English
 
-Gladys Assistant integration for the French **EDF Tempo** electricity tariff, with **forecasts up to 15 days ahead**. It adds a "Calendrier Tempo EDF" device (created in one click from the Discovery tab) with today's and tomorrow's official color, the current color (the Tempo day runs from 6:00 to 6:00), the tariff period (`hp` or `hc`), D+2 to D+5 forecasts, the number of red days in the next 15 days, the next red and white day, and the red and white days left in the season. D+6 to D+15 forecast features are optional (off by default). It also provides a "Tempo forecasts" dashboard widget (15-day chance of a red day) and three scene triggers: tomorrow's color announced, red day forecast, Tempo day started.
+Gladys Assistant integration for the French **EDF Tempo** electricity tariff, with **forecasts up to 15 days ahead**. It adds a "Calendrier Tempo EDF" device (created in one click from the Discovery tab) with today's and tomorrow's official color, the current color (the Tempo day runs from 6:00 to 6:00), the tariff period (`hp` or `hc`), the current, peak and off-peak price per kWh (from the price grid published by the API), D+2 to D+5 forecasts, the number of red days in the next 15 days, the next red and white day, and the red and white days left in the season. D+6 to D+15 forecast features are optional (off by default). It also provides a "Tempo forecasts" dashboard widget (15-day chance of a red day) and three scene triggers: tomorrow's color announced, red day forecast, Tempo day started.
 
 Reliability: `officielle` = color published by EDF, the only authoritative one; `fiable` = D+2 to D+5, the range where the site measures its performance, the most reliable one; `indicative` = D+6 to D+15, a trend rather than a certainty. Success rates are published on the [methodology page](https://www.calendrier-tempo.fr/methodologie), not in this integration.
 

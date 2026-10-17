@@ -19,6 +19,7 @@ import {
   fakeClock,
   memoryStore,
   realPayloads,
+  withTariffs,
 } from './helpers.js';
 
 const silent = createLogger({ level: 'silent' });
@@ -54,17 +55,17 @@ function cycleDelay(clock) {
   return delays.filter((d) => d === SCAN_INTERVAL_MS || d === RETRY_INTERVAL_MS)[0];
 }
 
-test('appareil proposé en découverte, accepté par Gladys (13 fonctionnalités)', async () => {
+test('appareil proposé en découverte, accepté par Gladys (16 fonctionnalités)', async () => {
   const { gladys } = await setup();
   const [device] = gladys.fake.discoveredDevices;
   assert.equal(device.name, 'Calendrier Tempo EDF');
-  assert.equal(device.features.length, 13);
+  assert.equal(device.features.length, 16);
   assert.ok(device.features.every((f) => f.read_only));
 });
 
 test('option J+6 à J+15 : 10 fonctionnalités de plus', async () => {
   const { gladys } = await setup({ config: { previsions_indicatives: true } });
-  assert.equal(gladys.fake.discoveredDevices[0].features.length, 23);
+  assert.equal(gladys.fake.discoveredDevices[0].features.length, 26);
 });
 
 test('lecture réelle : états publiés et acceptés par le faux Gladys', async () => {
@@ -436,4 +437,80 @@ test('réponse facultative qui n’est pas un objet : échec de l’endpoint, pa
   assert.equal(gladys.fake.connectionStatus.connected, true);
   assert.equal(tempo.data.days.length, 16, 'dernière réponse valide gardée');
   tempo.stop();
+});
+
+// ------------------------------------------------------------ prix du kWh (0.2.0)
+
+function pricedPayloads() {
+  const payloads = realPayloads();
+  payloads.today = withTariffs(payloads.today);
+  payloads.tomorrow = withTariffs(payloads.tomorrow, { grid: false });
+  return payloads;
+}
+
+test('prix du kWh : HP du jour à 14 h 43, HC à 22 h, nuit = veille, HP à 6 h', async () => {
+  const { gladys, tempo, clock } = await setup({ payloads: pricedPayloads() });
+  await tempo.start();
+  assert.equal(gladys.fake.requests.filter((r) => r.status === 400).length, 0);
+  assert.equal(last(gladys, FEATURE.PRICE), 0.1654);
+  assert.equal(last(gladys, FEATURE.DAY_PEAK_PRICE), 0.1654);
+  assert.equal(last(gladys, FEATURE.DAY_OFF_PEAK_PRICE), 0.1356);
+  clock.set(parisWallTimeToInstant('2026-10-14', 22, 0));
+  await tempo.tick();
+  assert.equal(last(gladys, FEATURE.PRICE), 0.1356, '22 h : heures creuses');
+  // Minuit passé, sans appel à l'API : journée Tempo du 14 jusqu'à 6 h.
+  clock.set(parisWallTimeToInstant('2026-10-15', 0, 0, 1));
+  await tempo.tick();
+  assert.equal(last(gladys, FEATURE.PRICE), 0.1356);
+  assert.equal(last(gladys, FEATURE.CURRENT), 'bleu');
+  clock.set(parisWallTimeToInstant('2026-10-15', 6, 0));
+  await tempo.tick();
+  assert.equal(last(gladys, FEATURE.PRICE), 0.1654, '6 h : HP du 15 (bleu)');
+  const refreshes = gladys.fake.widgetRefreshes.length;
+  clock.set(parisWallTimeToInstant('2026-10-15', 22, 0));
+  await tempo.tick();
+  assert.ok(gladys.fake.widgetRefreshes.length > refreshes, 'widget redemandé à 22 h');
+  assert.equal(last(gladys, FEATURE.PRICE), 0.1356);
+  const ack = await gladys.fake.widgetGet(FORECAST_WIDGET, {
+    settings: {},
+    language: 'fr',
+    units: 'metric',
+  });
+  const [status] = ack.data.content.components.filter((c) => c.type === 'status');
+  assert.deepEqual(status.items[0], {
+    label: 'Prix actuel',
+    value: '0,1356 €/kWh (HC, bleu)',
+    color: 'info',
+  });
+  tempo.stop();
+});
+
+test('prix du kWh : API sans grille (réponse actuelle ou en cache) → rien de publié', async () => {
+  const { gladys, tempo } = await setup();
+  await tempo.start();
+  for (const key of [FEATURE.PRICE, FEATURE.DAY_PEAK_PRICE, FEATURE.DAY_OFF_PEAK_PRICE]) {
+    assert.equal(last(gladys, key), undefined, key);
+  }
+  assert.equal(tempo.data.tariffs, null);
+  tempo.stop();
+});
+
+test('prix du kWh : grille gardée dans /data, reprise pendant une panne (24 h au plus)', async () => {
+  const store = memoryStore();
+  const first = await setup({ payloads: pricedPayloads(), store });
+  await first.tempo.start();
+  first.tempo.stop();
+  assert.equal(store.saved.tariffs.grid.couleurs.bleu.hp, 0.1654);
+  const down = new TempoApiError('panne');
+  const outage = { today: down, tomorrow: down, remaining: down, predictions: down };
+  const later = parisWallTimeToInstant('2026-10-14', 23, 0);
+  const second = await setup({ payloads: outage, store, start: later });
+  await second.tempo.start();
+  assert.equal(last(second.gladys, FEATURE.PRICE), 0.1356, 'HC du 14, grille relue dans /data');
+  second.tempo.stop();
+  const tooOld = parisWallTimeToInstant('2026-10-15', 23, 0);
+  const third = await setup({ payloads: outage, store, start: tooOld });
+  await third.tempo.start();
+  assert.equal(last(third.gladys, FEATURE.PRICE), undefined, 'grille de plus de 24 h : inconnue');
+  third.tempo.stop();
 });

@@ -22,6 +22,8 @@ Les données viennent de l'[API publique et gratuite de calendrier-tempo.fr](htt
 | Aujourd'hui (officielle)                     | `bleu`, `blanc` ou `rouge`                                            |
 | Couleur actuelle                             | la couleur qui s'applique maintenant : celle de la veille jusqu'à 6 h |
 | Période tarifaire                            | `hp` (heures pleines, 6 h à 22 h) ou `hc` (heures creuses)            |
+| Prix actuel du kWh                           | en euros TTC, couleur et période en cours (veille jusqu'à 6 h)        |
+| Prix HP du jour, prix HC du jour             | en euros TTC, pour la journée Tempo en cours                          |
 | Demain (officielle)                          | `inconnue` tant qu'EDF n'a pas annoncé la couleur (vers 11 h)         |
 | Prévision J+2 à J+5                          | couleur prévue, zone la plus fiable                                   |
 | Jours rouges sur 15 jours                    | jours rouges officiels ou prévus d'aujourd'hui à J+15                 |
@@ -29,6 +31,12 @@ Les données viennent de l'[API publique et gratuite de calendrier-tempo.fr](htt
 | Jours rouges restants, jours blancs restants | dans la saison en cours                                               |
 
 Pour piloter un chauffage, utilisez **Couleur actuelle** : la journée Tempo va de 6 h à 6 h.
+
+Les prix viennent de la grille publiée par l'API de calendrier-tempo.fr, jamais d'un tarif écrit dans l'intégration : si l'API ne la fournit pas, le prix reste inconnu. Gladys les affiche avec 3 chiffres significatifs (0,165 €), la valeur utilisable dans les scènes est exacte (0,1654).
+
+## Le widget
+
+Le widget **Prévisions Tempo** montre aujourd'hui, demain, les jours restants, le prix actuel (« Prix actuel : 0,1654 €/kWh (HP, bleu) »), la probabilité de jour rouge sur 15 jours (de 0 à 100 %) et la liste des prochains jours. Du 1er avril au 31 octobre, le graphique laisse la place au message « Pas de jour rouge possible avant le 1er novembre. ».
 
 ## Configuration
 
@@ -52,6 +60,7 @@ Seule la couleur publiée par EDF fait foi. De J+2 à J+5, la prévision est dan
 
 - **Pas d'appareil dans Gladys** : créez-le depuis l'onglet Découverte, l'intégration ne le crée jamais seule.
 - **Statut « déconnecté »** dans l'écran Configuration : calendrier-tempo.fr ne répond pas. L'intégration réessaie 5 minutes plus tard, puis toutes les 30 minutes. Les couleurs officielles déjà lues restent affichées pour leur date, même après un redémarrage ; prévisions et jours restants sont gardés 24 h au plus.
+- **Pas de prix du kWh** : l'API n'a pas encore publié sa grille de prix, ou la couleur de la journée Tempo en cours n'est pas connue. Le prix revient seul à la lecture suivante. Après la mise à jour en 0.2.0, mettez à jour l'appareil depuis l'onglet Découverte pour voir les trois fonctionnalités de prix.
 - **Couleur demain à `inconnue` le matin** : normal, EDF annonce la couleur vers 11 h. L'intégration relit l'API à 11 h 35.
 - Les journaux de l'intégration (Configuration, puis journaux) indiquent chaque lecture en échec.
 
