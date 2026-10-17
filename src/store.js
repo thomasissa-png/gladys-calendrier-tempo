@@ -3,8 +3,8 @@
 //
 // Contenu : derniers déclencheurs émis (pour ne jamais redéclencher après un
 // redémarrage), couleurs officielles vues (hier, aujourd'hui) et dernières
-// réponses valides des endpoints facultatifs (24 h au plus). Aucune donnée
-// personnelle. Écriture atomique : fichier temporaire puis renommage.
+// réponses valides des endpoints facultatifs (24 h au plus), dernière grille de
+// prix lue (sans limite de durée). Aucune donnée personnelle. Écriture atomique : fichier temporaire puis renommage.
 // -----------------------------------------------------------------------------
 
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';

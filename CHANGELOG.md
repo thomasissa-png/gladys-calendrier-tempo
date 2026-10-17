@@ -27,11 +27,13 @@ Demandes d'utilisateurs du forum Gladys.
   (J+2 à J+10 ensuite), mise à jour à 6 h et à 22 h.
 - Aucun prix n'est écrit dans l'intégration : une réponse sans grille (copie
   de secours ancienne, retour arrière du site) garde la dernière grille lue,
-  24 h au plus, y compris pendant une panne ; au-delà, le prix est inconnu
-  (rien d'affiché dans le widget, rien de publié). Gladys n'ayant pas d'état
-  « inconnu » pour une valeur en euros, l'appareil garde alors son dernier prix,
-  daté : dans une scène sur un prix, ajoutez la condition « Couleur actuelle
-  différente de `inconnue` ».
+  sans limite de durée, y compris pendant une panne (la grille ne change qu'à
+  sa date d'effet), jusqu'à la lecture d'une nouvelle grille. Sans grille
+  jamais lue, ou sans couleur connue pour la journée Tempo en cours, le prix
+  est inconnu (rien d'affiché dans le widget, rien de publié). Gladys n'ayant
+  pas d'état « inconnu » pour une valeur en euros, l'appareil garde alors son
+  dernier prix, daté : dans une scène sur un prix, ajoutez la condition
+  « Couleur actuelle différente de `inconnue` ».
 
 ### Corrections
 

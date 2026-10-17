@@ -266,10 +266,9 @@ export function createTempoIntegration(gladys, options = {}) {
     return parsed.color === null && known ? knownDayPayload(date, known) : payload;
   }
 
-  /** Dernière grille de prix lue, 24 h au plus, sinon null. */
+  /** Dernière grille de prix lue, sans limite de durée, sinon null (jamais lue). */
   function lastTariffs() {
-    const last = state.tariffs;
-    return last && now() - last.at <= STALE_PAYLOAD_MAX_AGE_MS ? last.grid : null;
+    return state.tariffs?.grid ?? null;
   }
 
   /**
@@ -278,8 +277,14 @@ export function createTempoIntegration(gladys, options = {}) {
    * (copie de secours ancienne, retour arrière du site, réponse partielle)
    * effaçait la grille gardée ; le prix devenait inconnu, rien n'était publié et
    * Gladys gardait un prix faux (HC à 14 h un jour rouge). Toute réponse sans
-   * grille garde désormais la dernière grille lue, 24 h au plus (la grille ne
-   * change qu'à sa date d'effet), puis le prix devient inconnu.
+   * grille garde désormais la dernière grille lue.
+   * REGRESSION N6 (contre-recette du 2026-10-17) : la limite de 24 h rendait le
+   * prix inconnu ; rien n'était publié et Gladys, qui n'a pas d'état inconnu
+   * pour les euros, gardait le dernier prix (HP 0,7295 d'un jour rouge affiché
+   * en heures creuses). La grille ne change qu'à sa date d'effet (deux fois par
+   * an) : la dernière lue sert sans limite de durée, jusqu'à la suivante. Le
+   * prix reste inconnu seulement sans grille jamais lue ou sans couleur connue
+   * pour la journée Tempo en cours.
    */
   function tariffsFrom(todayPayload) {
     const grid = parseTariffs(todayPayload);

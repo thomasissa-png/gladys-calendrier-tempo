@@ -34,7 +34,7 @@ Feature names are in French. Colors are `bleu` (blue), `blanc` (white) and `roug
 
 To drive heating, use **Couleur actuelle**: a Tempo day runs from 6:00 to 6:00.
 
-Prices come from the grid published by the calendrier-tempo.fr API, never from a tariff written in the integration: when a response lacks it, the last grid read is used for 24 hours at most, then the price stays unknown. Gladys shows prices with 3 significant digits ("0.165 €"); the value usable in scenes is exact (0.1654).
+Prices come from the grid published by the calendrier-tempo.fr API, never from a tariff written in the integration: when a response lacks it, the last grid read is used with no time limit (it only changes on its effective date), until a new one is read. The price stays unknown only if no grid was ever read or if the day's color is unknown. Gladys shows prices with 3 significant digits ("0.165 €"); the value usable in scenes is exact (0.1654).
 
 The **Tempo forecasts** widget shows today, tomorrow, days left, the current price ("€0.1654/kWh (peak, blue)"), the chance of a red day over 15 days (0 to 100 %) and the next days. When none of the next 15 days can be red (1 November to 31 March only, never on weekends or French public holidays), the chart gives way to "No red day possible before 1 November.". Chart ticks show without "%" (Gladys rendering); on a phone, the Gladys floating bar may hide the last rows of the widget: scroll the page.
 

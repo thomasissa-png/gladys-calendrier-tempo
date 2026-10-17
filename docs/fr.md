@@ -32,7 +32,7 @@ Les données viennent de l'[API publique et gratuite de calendrier-tempo.fr](htt
 
 Pour piloter un chauffage, utilisez **Couleur actuelle** : la journée Tempo va de 6 h à 6 h.
 
-Les prix viennent de la grille publiée par l'API de calendrier-tempo.fr, jamais d'un tarif écrit dans l'intégration : si une réponse ne la contient pas, la dernière grille lue sert 24 h au plus, puis le prix reste inconnu. Gladys les affiche avec 3 chiffres significatifs et un point décimal (« 0.165 € »), la valeur utilisable dans les scènes est exacte (0.1654).
+Les prix viennent de la grille publiée par l'API de calendrier-tempo.fr, jamais d'un tarif écrit dans l'intégration : si une réponse ne la contient pas, la dernière grille lue sert sans limite de durée (elle ne change qu'à sa date d'effet), jusqu'à la suivante. Le prix reste inconnu seulement si aucune grille n'a jamais été lue ou si la couleur du jour n'est pas connue. Gladys les affiche avec 3 chiffres significatifs et un point décimal (« 0.165 € »), la valeur utilisable dans les scènes est exacte (0.1654).
 
 ## Le widget
 

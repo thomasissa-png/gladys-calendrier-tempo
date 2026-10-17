@@ -496,7 +496,7 @@ test('prix du kWh : API sans grille (réponse actuelle ou en cache) → rien de 
   tempo.stop();
 });
 
-test('prix du kWh : grille gardée dans /data, reprise pendant une panne (24 h au plus)', async () => {
+test('prix du kWh : grille gardée dans /data, reprise pendant une panne, sans limite de durée', async () => {
   const store = memoryStore();
   const first = await setup({ payloads: pricedPayloads(), store });
   await first.tempo.start();
@@ -509,17 +509,18 @@ test('prix du kWh : grille gardée dans /data, reprise pendant une panne (24 h a
   await second.tempo.start();
   assert.equal(last(second.gladys, FEATURE.PRICE), 0.1356, 'HC du 14, grille relue dans /data');
   second.tempo.stop();
-  const tooOld = parisWallTimeToInstant('2026-10-15', 23, 0);
-  const third = await setup({ payloads: outage, store, start: tooOld });
+  // REGRESSION N6 : une grille lue il y a plus de 24 h sert toujours.
+  const old = parisWallTimeToInstant('2026-10-15', 23, 0);
+  const third = await setup({ payloads: outage, store, start: old });
   await third.tempo.start();
-  assert.equal(last(third.gladys, FEATURE.PRICE), undefined, 'grille de plus de 24 h : inconnue');
+  assert.equal(last(third.gladys, FEATURE.PRICE), 0.1356, 'grille de plus de 24 h : HC du 15');
   third.tempo.stop();
 });
 
 // REGRESSION KO-1 (recette du 2026-10-17) : une réponse /api/today « ok » sans
 // grille effaçait la grille gardée ; un jour rouge à 14 h, l'appareil restait au
 // prix HC publié avant (0,1615) au lieu du prix HP (0,7295).
-test('prix du kWh : réponse sans grille, la dernière grille lue sert 24 h au plus', async () => {
+test('prix du kWh : réponse sans grille, la dernière grille lue sert sans limite de durée', async () => {
   const p = seasonPayloads(35); // SCÉNARIO : mercredi 18 novembre 2026
   assert.equal(p.referenceDate, '2026-11-18');
   Object.assign(p.today, { couleur: 'ROUGE', code: 3 });
@@ -542,9 +543,42 @@ test('prix du kWh : réponse sans grille, la dernière grille lue sert 24 h au p
   clock.set(parisWallTimeToInstant('2026-11-18', 22, 0));
   await tempo.tick();
   assert.equal(last(gladys, FEATURE.PRICE), 0.1615, '22 h : HC rouge, grille gardée');
-  // Plus de 24 h après la dernière grille lue : prix inconnu, plus rien de publié.
-  clock.set(readAt + STALE_PAYLOAD_MAX_AGE_MS + 60_000);
+  // REGRESSION N6 : 48 h sans grille (vendredi 20, rouge), la grille du 18 sert
+  // toujours et la bascule HP/HC de 22 h reste juste.
+  payloads.today = { ...noGrid, date: '2026-11-20' };
+  payloads.tomorrow = { ...payloads.tomorrow, date: '2026-11-21' };
+  clock.set(parisWallTimeToInstant('2026-11-20', 14, 0));
   await tempo.refresh();
-  assert.equal(tempo.data.tariffs, null);
+  assert.ok(clock.now() - readAt > 2 * STALE_PAYLOAD_MAX_AGE_MS);
+  assert.equal(last(gladys, FEATURE.PRICE), 0.7295, '14 h le 20 : HP rouge');
+  clock.set(parisWallTimeToInstant('2026-11-20', 22, 0));
+  await tempo.tick();
+  assert.equal(last(gladys, FEATURE.PRICE), 0.1615, '22 h le 20 : HC rouge');
+  assert.equal(store.saved.tariffs.at, readAt);
+  tempo.stop();
+});
+
+// REGRESSION N6 (contre-recette du 2026-10-17) : plus de 24 h sans grille, le prix
+// n'était plus publié et Gladys, sans état inconnu pour les euros, gardait le prix
+// HP d'un jour rouge (0,7295) en heures creuses.
+test('prix du kWh : panne de plus de 24 h, le prix HP rouge ne reste pas en heures creuses', async () => {
+  const p = seasonPayloads(35); // SCÉNARIO : mercredi 18 novembre 2026
+  Object.assign(p.today, { couleur: 'ROUGE', code: 3 });
+  Object.assign(p.tomorrow, { couleur: 'ROUGE', code: 3 });
+  const payloads = { ...p, today: withTariffs(p.today) };
+  const readAt = parisWallTimeToInstant('2026-11-18', 9, 0);
+  const { tempo, clock, gladys } = await setup({ payloads, start: readAt });
+  await tempo.start();
+  assert.equal(last(gladys, FEATURE.PRICE), 0.7295, 'HP rouge le 18');
+  const down = new TempoApiError('panne');
+  Object.assign(payloads, { today: down, tomorrow: down, remaining: down, predictions: down });
+  clock.set(parisWallTimeToInstant('2026-11-19', 14, 0));
+  await tempo.refresh();
+  assert.equal(last(gladys, FEATURE.PRICE), 0.7295, '14 h le 19 (rouge) : HP');
+  clock.set(parisWallTimeToInstant('2026-11-19', 22, 0));
+  await tempo.tick();
+  assert.ok(clock.now() - readAt > STALE_PAYLOAD_MAX_AGE_MS);
+  assert.equal(last(gladys, FEATURE.PRICE), 0.1615, '22 h le 19 : HC rouge, pas le HP figé');
+  assert.equal(last(gladys, FEATURE.DAY_OFF_PEAK_PRICE), 0.1615);
   tempo.stop();
 });
