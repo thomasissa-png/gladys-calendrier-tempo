@@ -8,7 +8,7 @@ Les données viennent de l'[API publique et gratuite de calendrier-tempo.fr](htt
 
 Gladys affiche déjà la couleur officielle du jour et du lendemain avec son service EDF Tempo. Cette intégration le complète : prévisions de J+2 à J+15, jours restants, widget sur 15 jours et déclencheurs de scène qui n'existent pas ailleurs dans Gladys. Elle n'écrit pas dans le calendrier tarifaire `tempo` de Gladys (réservé aux couleurs officielles et au calcul des coûts).
 
-![Widget « Prévisions Tempo » et appareil « Calendrier Tempo EDF » dans Gladys 5.2.1, données réelles du 14 octobre 2026](docs/images/tableau-de-bord.jpg)
+![Widget « Prévisions Tempo » dans Gladys 5.2.1, version 0.2.0, données réelles du 17 octobre 2026 : prix actuel et message hors saison des jours rouges](docs/images/widget.png)
 
 ## Fiabilité : ce qui fait foi, ce qui est prévu
 
