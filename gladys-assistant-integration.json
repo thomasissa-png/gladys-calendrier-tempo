@@ -51,8 +51,8 @@
       "key": "previsions_tempo",
       "label": { "en": "Tempo forecasts", "fr": "Prévisions Tempo" },
       "description": {
-        "en": "Today, tomorrow, days left and the chance of a red day over 15 days.",
-        "fr": "Aujourd'hui, demain, jours restants et probabilité de jour rouge sur 15 jours."
+        "en": "Today, tomorrow, days left, current kWh price and the chance of a red day over 15 days.",
+        "fr": "Aujourd'hui, demain, jours restants, prix actuel du kWh et probabilité de jour rouge sur 15 jours."
       },
       "icon": "zap"
     }

@@ -4,10 +4,16 @@
 // Un seul appareil, proposé dans l'onglet « Découverte » de Gladys : c'est
 // l'utilisateur qui le crée en un clic. Les couleurs sont des fonctionnalités
 // texte (`bleu`, `blanc`, `rouge`, `inconnue`), les compteurs des
-// `counter-sensor` entiers : utilisables au tableau de bord et dans les scènes.
+// `counter-sensor` entiers, les prix du kWh des `currency` décimaux en euros
+// (catégorie « Devise » de Gladys) : utilisables au tableau de bord et dans
+// les scènes.
 // -----------------------------------------------------------------------------
 
-import { DEVICE_FEATURE_CATEGORIES, DEVICE_FEATURE_TYPES } from '@gladysassistant/integration-sdk';
+import {
+  DEVICE_FEATURE_CATEGORIES,
+  DEVICE_FEATURE_TYPES,
+  DEVICE_FEATURE_UNITS,
+} from '@gladysassistant/integration-sdk';
 import { FORECAST_OFFSETS, INDICATIVE_OFFSETS, NAME } from '../constants.js';
 import {
   COLOR_BLANC,
@@ -20,6 +26,7 @@ import {
   periodFor,
   tempoDay,
 } from '../tempo.js';
+import { currentPrice } from '../tariffs.js';
 import { parisParts } from '../time.js';
 
 const DEVICE_TYPE = 'calendrier-tempo';
@@ -34,6 +41,9 @@ export const FEATURE = Object.freeze({
   TODAY: 'couleur-aujourd-hui',
   CURRENT: 'couleur-actuelle',
   PERIOD: 'periode',
+  PRICE: 'prix-actuel',
+  DAY_PEAK_PRICE: 'prix-hp-du-jour',
+  DAY_OFF_PEAK_PRICE: 'prix-hc-du-jour',
   TOMORROW: 'couleur-demain',
   forecast: (offset) => `prevision-j${offset}`,
   RED_15_DAYS: 'jours-rouges-15-jours',
@@ -71,6 +81,23 @@ function counterFeature(ids, key, name, max) {
   };
 }
 
+// Prix du kWh en euros TTC (Gladys n'a pas d'unité « €/kWh » : l'unité est
+// l'euro, le nom dit « par kWh »). Gardé en historique pour les graphiques.
+function priceFeature(ids, key, name) {
+  return {
+    name,
+    external_id: ids.feature(key),
+    category: DEVICE_FEATURE_CATEGORIES.CURRENCY,
+    type: DEVICE_FEATURE_TYPES.CURRENCY.DECIMAL,
+    unit: DEVICE_FEATURE_UNITS.EURO,
+    read_only: true,
+    has_feedback: false,
+    keep_history: true,
+    min: 0,
+    max: 10,
+  };
+}
+
 /** Prévisions publiées une à une : J+2 à J+5, et J+6 à J+15 si l'option est active. */
 export function forecastOffsets(config) {
   return config.previsions_indicatives
@@ -98,6 +125,9 @@ export const calendrierTempo = {
         textFeature(ids, FEATURE.TODAY, "Aujourd'hui (officielle)"),
         textFeature(ids, FEATURE.CURRENT, 'Couleur actuelle'),
         textFeature(ids, FEATURE.PERIOD, 'Période tarifaire'),
+        priceFeature(ids, FEATURE.PRICE, 'Prix actuel du kWh'),
+        priceFeature(ids, FEATURE.DAY_PEAK_PRICE, 'Prix HP du jour'),
+        priceFeature(ids, FEATURE.DAY_OFF_PEAK_PRICE, 'Prix HC du jour'),
         textFeature(ids, FEATURE.TOMORROW, 'Demain (officielle)'),
         ...forecastOffsets(config).map((offset) =>
           textFeature(
@@ -118,7 +148,7 @@ export const calendrierTempo = {
   /**
    * États à publier pour les données lues et l'heure donnée. Une couleur
    * inconnue est publiée « inconnue » (jamais l'ancienne valeur) ; un compteur
-   * inconnu n'est pas publié (Gladys garde la dernière valeur, datée).
+   * ou un prix inconnu n'est pas publié (Gladys garde la dernière valeur, datée).
    * @param {object|null} data - TempoData, ou null si aucune lecture réussie
    */
   buildStates(gladys, data, now, config) {
@@ -159,6 +189,15 @@ export const calendrierTempo = {
     }
     if (data.remaining.blanc !== null) {
       states.push(number(FEATURE.WHITE_LEFT, data.remaining.blanc));
+    }
+    // Prix de la journée Tempo en cours (celle de la veille avant 6 h).
+    const price = currentPrice(data, now);
+    if (price.price !== null) {
+      states.push(
+        number(FEATURE.PRICE, price.price),
+        number(FEATURE.DAY_PEAK_PRICE, price.hp),
+        number(FEATURE.DAY_OFF_PEAK_PRICE, price.hc),
+      );
     }
     return states;
   },

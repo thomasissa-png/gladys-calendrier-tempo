@@ -10,7 +10,8 @@
 //   - toutes les 30 min, plus 0 h 05 et 11 h 35 heure de Paris ; après un échec,
 //     une seule relance 5 min plus tard, puis retour au cycle.
 // En plus : décalage aléatoire de 0 à 120 s propre à l'installation sur les
-// rendez-vous fixes, et minuit / 6 h / 22 h recalculés sans appel à l'API.
+// rendez-vous fixes, et minuit / 6 h / 22 h recalculés sans appel à l'API
+// (couleur actuelle, période et prix du kWh, d'après la grille de /api/today).
 //
 // Publication dans Gladys : rien avant la fin de la première lecture (jamais de
 // passage à « inconnue » au redémarrage) ; une couleur n'est envoyée que si elle
@@ -38,6 +39,7 @@ import { normalizeConfig } from './config.js';
 import { calendrierTempo } from './devices/calendrierTempo.js';
 import { computeSceneEvents, emptyTriggerMemory } from './scenes.js';
 import { createStateStore } from './store.js';
+import { parseTariffs } from './tariffs.js';
 import {
   ApiDataError,
   buildTempoData,
@@ -82,6 +84,7 @@ export function createTempoIntegration(gladys, options = {}) {
     payloads: {}, // endpoint -> { payload, at }
     failing: new Set(),
     officialColors: {}, // date ISO -> couleur officielle (hier, aujourd'hui, demain)
+    tariffs: null, // { grid, at } : dernière grille de prix lue dans /api/today
     triggers: emptyTriggerMemory(),
     jitterMs: null,
     shortRetryDone: false,
@@ -97,7 +100,7 @@ export function createTempoIntegration(gladys, options = {}) {
     dailyTimers: new Map(),
   };
 
-  const widgets = createWidgets(() => state.data);
+  const widgets = createWidgets(() => state.data, now);
   // Valeur texte que Gladys a déjà, par fonctionnalité (relue à chaque connexion).
   const knownTexts = new Map();
 
@@ -110,6 +113,7 @@ export function createTempoIntegration(gladys, options = {}) {
     state.officialColors = saved.officialColors ?? {};
     state.triggers = { ...emptyTriggerMemory(), ...(saved.triggers ?? {}) };
     state.payloads = saved.payloads ?? {};
+    state.tariffs = isPlainObject(saved.tariffs) ? saved.tariffs : null;
   }
 
   function saveState() {
@@ -118,6 +122,7 @@ export function createTempoIntegration(gladys, options = {}) {
       officialColors: state.officialColors,
       triggers: state.triggers,
       payloads: state.payloads,
+      tariffs: state.tariffs,
     });
   }
 
@@ -261,6 +266,34 @@ export function createTempoIntegration(gladys, options = {}) {
     return parsed.color === null && known ? knownDayPayload(date, known) : payload;
   }
 
+  /** Dernière grille de prix lue, sans limite de durée, sinon null (jamais lue). */
+  function lastTariffs() {
+    return state.tariffs?.grid ?? null;
+  }
+
+  /**
+   * Grille de prix d'une lecture : celle de /api/today, quand elle y figure.
+   * REGRESSION KO-1 (recette du 2026-10-17) : une réponse « ok » sans grille
+   * (copie de secours ancienne, retour arrière du site, réponse partielle)
+   * effaçait la grille gardée ; le prix devenait inconnu, rien n'était publié et
+   * Gladys gardait un prix faux (HC à 14 h un jour rouge). Toute réponse sans
+   * grille garde désormais la dernière grille lue.
+   * REGRESSION N6 (contre-recette du 2026-10-17) : la limite de 24 h rendait le
+   * prix inconnu ; rien n'était publié et Gladys, qui n'a pas d'état inconnu
+   * pour les euros, gardait le dernier prix (HP 0,7295 d'un jour rouge affiché
+   * en heures creuses). La grille ne change qu'à sa date d'effet (deux fois par
+   * an) : la dernière lue sert sans limite de durée, jusqu'à la suivante. Le
+   * prix reste inconnu seulement sans grille jamais lue ou sans couleur connue
+   * pour la journée Tempo en cours.
+   */
+  function tariffsFrom(todayPayload) {
+    const grid = parseTariffs(todayPayload);
+    if (grid) {
+      state.tariffs = { grid, at: now() };
+    }
+    return grid ?? lastTariffs();
+  }
+
   /** Données reconstruites sans appel à l'API : couleurs déjà lues et réponses gardées. */
   function dataFromMemory(nowMs) {
     const date = parisParts(nowMs).date;
@@ -279,6 +312,7 @@ export function createTempoIntegration(gladys, options = {}) {
     return {
       ...data,
       yesterday: { date: yesterday, color: state.officialColors[yesterday] ?? null },
+      tariffs: lastTariffs(),
     };
   }
 
@@ -324,7 +358,14 @@ export function createTempoIntegration(gladys, options = {}) {
     }
     const complete = missing.length === 0 && !data.stale && !sourceDown;
     const yesterdayColor = state.officialColors[yesterday] ?? null;
-    return { data: { ...data, yesterday: { date: yesterday, color: yesterdayColor } }, complete };
+    return {
+      data: {
+        ...data,
+        yesterday: { date: yesterday, color: yesterdayColor },
+        tariffs: tariffsFrom(today),
+      },
+      complete,
+    };
   }
 
   // ------------------------------------------------------------------- rythme
@@ -391,10 +432,11 @@ export function createTempoIntegration(gladys, options = {}) {
     // « Aujourd'hui » et « Demain » gardaient les couleurs de la veille.
     if (state.data && state.data.referenceDate !== parisParts(now()).date) {
       state.data = dataFromMemory(now());
-      refreshWidgets();
     }
     await publishStates();
     await publishSceneEvents();
+    // Le prix affiché change à 6 h et à 22 h : widget redemandé à chaque passage.
+    refreshWidgets();
     await saveState();
   }
 

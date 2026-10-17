@@ -6,7 +6,9 @@ import {
   buildTempoData,
   countColor,
   dayForOffset,
+  easterSunday,
   fiabiliteFor,
+  isFrenchHoliday,
   nextDayOfColor,
   normalizeColor,
   officialColor,
@@ -16,6 +18,7 @@ import {
   parseRemaining,
   periodFor,
   probability,
+  redPossible,
   tempoDay,
 } from '../src/tempo.js';
 import { TOMORROW_PENDING, fixture, realPayloads } from './helpers.js';
@@ -165,4 +168,60 @@ test('couleurs et fiabilité', () => {
   assert.equal(fiabiliteFor(1, false), 'fiable');
   assert.equal(fiabiliteFor(5, false), 'fiable');
   assert.equal(fiabiliteFor(6, false), 'indicative');
+});
+
+test('Pâques et jours fériés français (fêtes mobiles comprises)', () => {
+  const easter = [2008, 2024, 2025, 2026, 2027, 2028, 2038, 2285].map(easterSunday);
+  assert.deepEqual(easter, [
+    '2008-03-23',
+    '2024-03-31',
+    '2025-04-20',
+    '2026-04-05',
+    '2027-03-28',
+    '2028-04-16',
+    '2038-04-25',
+    '2285-03-22',
+  ]);
+  for (const date of [
+    '2026-11-01',
+    '2026-11-11',
+    '2026-12-25',
+    '2027-01-01',
+    '2027-03-29', // lundi de Pâques, en mars
+    '2027-05-06', // Ascension
+    '2027-05-17', // lundi de Pentecôte
+    '2027-05-01',
+    '2027-05-08',
+    '2027-07-14',
+    '2027-08-15',
+  ]) {
+    assert.equal(isFrenchHoliday(date), true, date);
+  }
+  for (const date of ['2026-11-02', '2026-12-24', '2026-12-26', '2027-03-28', '2027-03-30']) {
+    assert.equal(isFrenchHoliday(date), false, date);
+  }
+});
+
+// REGRESSION N1 (recette du 2026-10-17) : le 1er novembre (Toussaint) comptait
+// comme « rouge possible ».
+test('rouge possible : du 1er novembre au 31 mars, hors week-ends et jours fériés', () => {
+  const possible = {
+    '2026-10-30': false, // octobre (R1)
+    '2026-11-01': false, // dimanche et Toussaint
+    '2026-11-02': true, // lundi
+    '2026-11-11': false, // Armistice (mercredi)
+    '2026-11-14': false, // samedi
+    '2026-11-15': false, // dimanche
+    '2026-12-25': false, // Noël
+    '2027-01-01': false, // jour de l'an
+    '2027-01-04': true,
+    '2027-03-29': false, // lundi de Pâques
+    '2027-03-31': true, // mercredi 31 mars
+    '2027-04-01': false, // avril (R1)
+  };
+  for (const [date, expected] of Object.entries(possible)) {
+    assert.equal(redPossible(date), expected, date);
+  }
+  // Novembre 2030 : le 1er tombe un vendredi, toujours férié.
+  assert.equal(redPossible('2030-11-01'), false);
 });
