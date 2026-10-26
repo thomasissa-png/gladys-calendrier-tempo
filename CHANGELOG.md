@@ -10,6 +10,36 @@ la note de la publication GitHub de cette version.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-26
+
+Même affichage que le site calendrier-tempo.fr et que le composant Home
+Assistant 0.3.1.
+
+### Modifications
+
+- Widget, liste J+2 à J+11 : quand la prévision hésite entre deux couleurs
+  (règle du site : moins de 30 points d'écart entre la couleur prévue et la
+  plus probable des deux autres, et plus de 15 % pour celle-ci), la ligne nomme
+  les deux couleurs, la couleur prévue d'abord, avec leurs deux pourcentages :
+  « Blanc ou bleu ? 50 % / 45 % » (« White or blue? 50% / 45% » en
+  anglais). Gladys n'ayant qu'une couleur par ligne, le point reste celui de la
+  couleur prévue.
+- Le libellé vient du champ `libelle` de `/api/predictions` (champs
+  `hesitation`, `seconde_couleur`, `tendance` et `libelle`, ajoutés par le site
+  le 26 octobre 2026). Sans ces champs (ancienne réponse, copie de secours,
+  données gardées avant la mise à jour), l'intégration applique la même règle à
+  partir des probabilités. Jamais pour un jour officiel.
+- Widget : plus de « (tendance) » après J+5 dans la liste. L'échéance reste
+  visible dans les fonctionnalités (« Prévision J+6 (indicative) ») et dans le
+  filtre « Fiabilité » du déclencheur « Jour rouge prévu ».
+- Pourcentages du widget arrondis comme sur le site, demi vers le haut
+  (0,285 s'affiche 29 %, et non plus 28 %).
+- Catalogue : l'option J+6 à J+15 et le filtre « Fiabilité » disent
+  « indicative » au lieu de « tendance ». La valeur du filtre (`indicative`) ne
+  change pas : les scènes existantes continuent de fonctionner.
+- Rien ne change pour les fonctionnalités de l'appareil ni pour les scènes : la
+  couleur publiée reste la couleur prévue (`couleur_predite`).
+
 ## [0.2.0] - 2026-10-17
 
 Demandes d'utilisateurs du forum Gladys.
@@ -92,6 +122,7 @@ Demandes d'utilisateurs du forum Gladys.
 - Une réponse facultative qui n'est pas un objet JSON n'invalide plus toute la
   lecture.
 
-[Unreleased]: https://github.com/thomasissa-png/gladys-calendrier-tempo/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/thomasissa-png/gladys-calendrier-tempo/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/thomasissa-png/gladys-calendrier-tempo/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/thomasissa-png/gladys-calendrier-tempo/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/thomasissa-png/gladys-calendrier-tempo/releases/tag/v0.1.0
