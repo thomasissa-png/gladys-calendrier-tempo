@@ -29,6 +29,19 @@ export const HORIZON_FIABLE_MAX = 5;
 export const SOURCE_EDF = 'edf';
 export const SOURCE_CALCUL = 'calcul';
 
+// Hésitation, même règle que le site (incertitude.py) et le composant Home
+// Assistant 0.3.1 : écart entre la probabilité de la couleur prévue et celle de
+// la seconde couleur (la plus probable des deux autres) inférieur à 0,30 ET
+// seconde couleur au-dessus de 0,15. Jamais pour un jour officiel.
+export const HESITATION_ECART = 0.3;
+export const HESITATION_SECONDE = 0.15;
+// Espace insécable (U+00A0) avant « ? » dans le libellé (typographie du site).
+const NBSP = ' ';
+
+// Champs d'incertitude ajoutés à /api/predictions le 2026-10-26 (absents des
+// anciennes réponses et des données gardées dans /data avant la 0.3.0).
+const UNCERTAINTY_FIELDS = ['hesitation', 'seconde_couleur', 'tendance', 'libelle'];
+
 // Champs d'une prévision repris tels quels, uniquement s'ils existent.
 const PREDICTION_ATTRIBUTES = [
   'probabilite_bleu',
@@ -40,6 +53,7 @@ const PREDICTION_ATTRIBUTES = [
   'temp_moy_prevue',
   'raison',
   'confirmed',
+  ...UNCERTAINTY_FIELDS,
 ];
 
 export class ApiDataError extends Error {
@@ -230,6 +244,88 @@ export function probability(day, color) {
     return color === day.color ? 1 : 0;
   }
   return asNumber(day.attributes[`probabilite_${color}`]);
+}
+
+/** Arrondi « demi vers le haut », comme le site : 0,505 → 51, 0,285 → 29 (pas 28). */
+export function percent(value) {
+  return Math.floor(Number((value * 100).toFixed(9)) + 0.5);
+}
+
+/** Écart < 0,30 et seconde > 0,15 (écart arrondi : 0,70 - 0,40 vaut bien 0,30). */
+export function hesitates(p1, p2) {
+  if (p1 === null || p2 === null) {
+    return false;
+  }
+  return Number((p1 - p2).toFixed(9)) < HESITATION_ECART && p2 > HESITATION_SECONDE;
+}
+
+/** Prévision au-delà de J+5 : une tendance (calcul local, toujours à jour). */
+export function isTrend(day) {
+  return !day.official && day.offset > HORIZON_FIABLE_MAX;
+}
+
+// Champs `hesitation` et `seconde_couleur` de l'API : { usable, second }.
+function apiSecondColor(day) {
+  const flag = day.attributes.hesitation;
+  if (typeof flag !== 'boolean') {
+    return { usable: false, second: null };
+  }
+  if (!flag) {
+    return { usable: true, second: null };
+  }
+  const second = normalizeColor(day.attributes.seconde_couleur);
+  if (second === null || second === day.color) {
+    return { usable: false, second: null };
+  }
+  return { usable: true, second };
+}
+
+/**
+ * Seconde couleur en cas d'hésitation, sinon null (jamais pour un jour officiel).
+ * Champs `hesitation` et `seconde_couleur` de l'API s'ils sont présents et
+ * cohérents, sinon même calcul que le site à partir des probabilités (ancienne
+ * réponse, copie de secours, données gardées avant la 0.3.0).
+ */
+export function secondColor(day) {
+  if (day.official) {
+    return null;
+  }
+  const api = apiSecondColor(day);
+  if (api.usable) {
+    return api.second;
+  }
+  // À égalité, ordre stable bleu, blanc, rouge (comme le site).
+  let best = null;
+  for (const color of COLORS) {
+    const p = color === day.color ? null : probability(day, color);
+    if (p !== null && (best === null || p > best.p)) {
+      best = { color, p };
+    }
+  }
+  return best && hesitates(probability(day, day.color), best.p) ? best.color : null;
+}
+
+/**
+ * Libellé du site, en français : « Blanc » ou « Blanc ou bleu ? », jamais
+ * « Tendance » (2026-10-26). Celui de l'API s'il est cohérent (et sans
+ * « tendance »), sinon calculé.
+ */
+export function libelle(day) {
+  const label = day.attributes.libelle;
+  const trend = day.attributes.tendance;
+  if (
+    !day.official &&
+    typeof label === 'string' &&
+    label.trim() &&
+    !/tendance/i.test(label) &&
+    apiSecondColor(day).usable &&
+    (typeof trend !== 'boolean' || trend === isTrend(day))
+  ) {
+    return label.trim();
+  }
+  const second = secondColor(day);
+  const name = day.color.charAt(0).toUpperCase() + day.color.slice(1);
+  return second ? `${name} ou ${second}${NBSP}?` : name;
 }
 
 function forecastDay(date, referenceDate, color, official, attributes) {

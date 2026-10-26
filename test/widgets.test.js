@@ -2,7 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { validateWidgetContent } from '@gladysassistant/integration-sdk';
 import { buildForecastWidget } from '../src/widgets.js';
-import { buildTempoData } from '../src/tempo.js';
+import { buildTempoData, percent, secondColor } from '../src/tempo.js';
+import { calendrierTempo, FEATURE } from '../src/devices/calendrierTempo.js';
 import { parseTariffs } from '../src/tariffs.js';
 import { parisWallTimeToInstant } from '../src/time.js';
 import {
@@ -214,7 +215,7 @@ test('widget : prix actuel en tête de liste (HP de 6 h à 22 h, HC sinon)', () 
     color: 'info',
   });
   assert.equal(fr.length, 10, 'prix + J+2 à J+10');
-  assert.equal(fr.at(-1).label, 'sam. 24 · J+10 (tendance)');
+  assert.equal(fr.at(-1).label, 'sam. 24 · J+10', 'plus de « (tendance) »');
   assert.equal(items('fr', at(22, 0))[0].value, '0,1356 €/kWh (HC, bleu)');
   assert.equal(items('en', at(10, 0))[0].value, '€0.1654/kWh (peak, blue)');
   assert.deepEqual(validateWidgetContent(buildForecastWidget(d, 'fr', at(14, 43))), []);
@@ -225,11 +226,163 @@ test('widget : sans grille de prix (ancienne réponse), aucune ligne de prix', (
   const [status] = byType(buildForecastWidget(d, 'fr', RECORDED_AT), 'status');
   assert.equal(status.items.length, 10);
   assert.ok(status.items.every((item) => !item.label.startsWith('Prix')));
-  assert.equal(status.items[9].label, 'dim. 25 · J+11 (tendance)');
+  assert.equal(status.items[9].label, 'dim. 25 · J+11');
 });
 
 test('widget sans données : état d’attente valide', () => {
   const content = buildForecastWidget(null, 'fr');
   assert.deepEqual(validateWidgetContent(content), []);
   assert.equal(byType(content, 'value').length, 0);
+});
+
+// -----------------------------------------------------------------------------
+// Hésitation (0.3.0) : même règle que le site (incertitude.py) et le composant
+// Home Assistant 0.3.1. SCÉNARIOS (pas des données réelles) : une prévision des
+// réponses du 14/10 remplacée par des probabilités choisies.
+// -----------------------------------------------------------------------------
+
+const NBSP = ' '; // espace insécable (U+00A0), comme le site
+const UNCERTAINTY_FIELDS = ['hesitation', 'seconde_couleur', 'tendance', 'libelle'];
+
+function withForecast(date, fields) {
+  const predictions = fixture('predictions');
+  const item = predictions.predictions.find((p) => p.date === date);
+  for (const key of UNCERTAINTY_FIELDS) {
+    delete item[key];
+  }
+  Object.assign(item, fields);
+  return data({ predictions });
+}
+
+const rowFor = (d, offset, language = 'fr') =>
+  byType(buildForecastWidget(d, language, RECORDED_AT), 'status')[0].items.find((item) =>
+    item.label.endsWith(`J+${offset}`),
+  );
+
+const WHITE_OR_BLUE = {
+  couleur_predite: 'BLANC',
+  probabilite_bleu: 0.45,
+  probabilite_blanc: 0.5,
+  probabilite_rouge: 0.05,
+};
+const API_WHITE_OR_BLUE = {
+  hesitation: true,
+  seconde_couleur: 'BLEU',
+  tendance: false,
+  libelle: `Blanc ou bleu${NBSP}?`,
+};
+
+test('hésitation (champs de l’API) : libellé, puis les deux pourcentages', () => {
+  const d = withForecast('2026-10-16', { ...WHITE_OR_BLUE, ...API_WHITE_OR_BLUE });
+  assert.deepEqual(rowFor(d, 2, 'fr'), {
+    label: 'ven. 16 · J+2',
+    value: `Blanc ou bleu${NBSP}? 50 % / 45 %`,
+    color: 'neutral',
+  });
+  assert.deepEqual(rowFor(d, 2, 'en'), {
+    label: 'Fri 16 · J+2',
+    value: 'White or blue? 50% / 45%',
+    color: 'neutral',
+  });
+  for (const language of ['fr', 'en']) {
+    assert.deepEqual(validateWidgetContent(buildForecastWidget(d, language, RECORDED_AT)), []);
+  }
+});
+
+test('hésitation : les champs de l’API priment sur le calcul local', () => {
+  const d = withForecast('2026-10-16', { ...WHITE_OR_BLUE, hesitation: false, libelle: 'Blanc' });
+  assert.equal(rowFor(d, 2).value, 'Blanc 50 %');
+  // Champs incohérents (seconde couleur = couleur prévue) : calcul local.
+  const odd = withForecast('2026-10-16', {
+    ...WHITE_OR_BLUE,
+    ...API_WHITE_OR_BLUE,
+    seconde_couleur: 'BLANC',
+  });
+  assert.equal(rowFor(odd, 2).value, `Blanc ou bleu${NBSP}? 50 % / 45 %`);
+});
+
+test('secours sans champs (ancienne API, cache) : même règle que le site', () => {
+  const d = withForecast('2026-10-16', WHITE_OR_BLUE);
+  assert.equal(rowFor(d, 2).value, `Blanc ou bleu${NBSP}? 50 % / 45 %`);
+  assert.equal(rowFor(d, 2, 'en').value, 'White or blue? 50% / 45%');
+  // Arrondi « demi vers le haut » : 0,505 → 51, 0,285 → 29 (Math.round donnerait 28).
+  const rounded = withForecast('2026-10-16', {
+    couleur_predite: 'BLEU',
+    probabilite_bleu: 0.505,
+    probabilite_blanc: 0.285,
+    probabilite_rouge: 0.21,
+  });
+  assert.equal(rowFor(rounded, 2).value, `Bleu ou blanc${NBSP}? 51 % / 29 %`);
+  assert.equal(percent(0.285), 29);
+  assert.equal(percent(0.505), 51);
+  assert.equal(percent(0.125), 13);
+  // Les fixtures réelles du 14/10 n'ont pas les champs : aucun jour J+2 à J+11 n'hésite.
+  assert.ok(
+    byType(buildForecastWidget(data(), 'fr', RECORDED_AT), 'status')[0].items.every(
+      (item) => !item.value.includes(' ou ') && !item.value.includes('/'),
+    ),
+  );
+});
+
+test('secours : seuils exacts (écart 0,30 et seconde 0,15 exclus), égalité bleu avant rouge', () => {
+  const day = (color, probas) => ({
+    official: false,
+    offset: 3,
+    color,
+    attributes: Object.fromEntries(Object.entries(probas).map(([c, p]) => [`probabilite_${c}`, p])),
+  });
+  assert.equal(secondColor(day('bleu', { bleu: 0.7, blanc: 0.4, rouge: 0 })), null, '0,30 pile');
+  assert.equal(secondColor(day('bleu', { bleu: 0.69, blanc: 0.4, rouge: 0 })), 'blanc');
+  assert.equal(secondColor(day('blanc', { bleu: 0.15, blanc: 0.3, rouge: 0.1 })), null, '0,15');
+  assert.equal(secondColor(day('blanc', { bleu: 0.3, blanc: 0.4, rouge: 0.3 })), 'bleu');
+  assert.equal(secondColor(day('blanc', { blanc: 0.5 })), null, 'probabilités absentes');
+});
+
+test('jour officiel : jamais d’hésitation, même si l’API en signale une', () => {
+  const d = withForecast('2026-10-16', { ...WHITE_OR_BLUE, ...API_WHITE_OR_BLUE, confirmed: true });
+  assert.equal(rowFor(d, 2).value, 'Blanc (officielle)');
+  assert.equal(rowFor(d, 2, 'en').value, 'White (official)');
+  assert.equal(secondColor(d.days.find((day) => day.offset === 2)), null);
+});
+
+test('jour lointain : plus de « tendance » ni « trend », l’hésitation reste montrée', () => {
+  const far = withForecast('2026-10-24', {
+    tendance: true,
+    hesitation: false,
+    seconde_couleur: null,
+    // Un libellé « Tendance » de l'API ne serait jamais affiché.
+    libelle: 'Tendance bleu',
+  });
+  assert.deepEqual(rowFor(far, 10), { label: 'sam. 24 · J+10', value: 'Bleu 99 %', color: 'info' });
+  for (const language of ['fr', 'en']) {
+    const text = JSON.stringify(buildForecastWidget(far, language, RECORDED_AT));
+    assert.doesNotMatch(text, /tendance|trend/i, language);
+  }
+  const hesitant = withForecast('2026-10-23', {
+    couleur_predite: 'BLEU',
+    probabilite_bleu: 0.5,
+    probabilite_blanc: 0.45,
+    probabilite_rouge: 0.05,
+    hesitation: true,
+    seconde_couleur: 'BLANC',
+    tendance: true,
+    libelle: `Bleu ou blanc${NBSP}?`,
+  });
+  assert.deepEqual(rowFor(hesitant, 9), {
+    label: 'ven. 23 · J+9',
+    value: `Bleu ou blanc${NBSP}? 50 % / 45 %`,
+    color: 'info',
+  });
+});
+
+test('valeur principale : couleur_predite inchangée (point, fonctionnalités, scènes)', () => {
+  const d = withForecast('2026-10-16', { ...WHITE_OR_BLUE, ...API_WHITE_OR_BLUE });
+  assert.equal(d.days.find((day) => day.offset === 2).color, 'blanc');
+  assert.equal(rowFor(d, 2).color, 'neutral', 'point de la ligne : blanc, la couleur prévue');
+  const gladys = { externalIds: () => ({ device: 'appareil', feature: (key) => key }) };
+  const states = calendrierTempo.buildStates(gladys, d, RECORDED_AT, {
+    previsions_indicatives: false,
+  });
+  const j2 = states.find((s) => s.device_feature_external_id === FEATURE.forecast(2));
+  assert.equal(j2.text, 'blanc');
 });

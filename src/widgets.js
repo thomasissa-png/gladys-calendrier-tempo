@@ -7,7 +7,8 @@
 //   - 1 graphique (focal) : probabilité de rouge d'aujourd'hui à J+15, en %,
 //     remplacé par un message court quand il n'aurait rien à montrer ;
 //   - 1 liste d'état : prix actuel du kWh (s'il est connu), puis J+2 à J+11
-//     (J+10 avec le prix), couleur prévue et sa probabilité ;
+//     (J+10 avec le prix), couleur prévue et sa probabilité, les deux couleurs
+//     et leurs deux probabilités quand la prévision hésite ;
 //   - 1 légende (source, licence) et 1 bouton vers le calendrier du site.
 // Les couleurs du widget sont une énumération de Gladys : bleu → info,
 // blanc → neutral, rouge → danger.
@@ -21,8 +22,11 @@ import {
   COLOR_BLEU,
   COLOR_ROUGE,
   dayForOffset,
+  libelle,
+  percent,
   probability,
   redPossible,
+  secondColor,
 } from './tempo.js';
 
 export const FORECAST_WIDGET = 'previsions_tempo';
@@ -87,20 +91,43 @@ function counterTile(label, value, color) {
   return { type: 'value', label, value: value ?? '?', color, icon: 'calendar' };
 }
 
+// Libellé d'un jour prévu : `libelle` de l'API en français (« Blanc »,
+// « Blanc ou bleu ? »), sa traduction en anglais (« White or blue? »).
+function dayLabel(day, second, language) {
+  if (isFrench(language)) {
+    return libelle(day);
+  }
+  const name = pick(styleOf(day.color).label, language);
+  return second ? `${name} or ${pick(styleOf(second).label, language).toLowerCase()}?` : name;
+}
+
+/**
+ * Une ligne J+2 à J+11. Le point coloré de Gladys reste la couleur prévue
+ * (`couleur_predite`, la même que celle des fonctionnalités et des scènes).
+ * Gladys n'a qu'une couleur par ligne, pas de pastille deux couleurs : en cas
+ * d'hésitation, le texte nomme les deux couleurs (prévue d'abord) et donne
+ * leurs deux pourcentages, « Blanc ou bleu ? 50 % / 45 % ». Plus de
+ * « (tendance) » au-delà de J+5 (règle du site du 2026-10-26).
+ */
 function statusItem(day, offset, language) {
   const style = styleOf(day?.color);
   const when = day ? shortDate(day.date, language) : '';
-  const trend = offset > 5 ? (isFrench(language) ? ' (tendance)' : ' (trend)') : '';
-  const label = `${when} · J+${offset}${trend}`.trim();
+  const label = `${when} · J+${offset}`.trim();
   if (!day) {
     return { label, value: pick(UNKNOWN_STYLE.label, language), color: style.color };
   }
-  const p = probability(day, day.color);
-  const official = day.official ? (isFrench(language) ? ' (officielle)' : ' (official)') : '';
-  const value =
-    p === null || day.official
-      ? `${pick(style.label, language)}${official}`
-      : `${pick(style.label, language)} ${formatPercent(Math.round(p * 100), language)}`;
+  if (day.official) {
+    const official = isFrench(language) ? ' (officielle)' : ' (official)';
+    return { label, value: `${pick(style.label, language)}${official}`, color: style.color };
+  }
+  const second = secondColor(day);
+  const p1 = probability(day, day.color);
+  const p2 = second ? probability(day, second) : null;
+  // Le pourcentage de la seconde couleur n'est jamais montré seul.
+  const percents = (p1 === null ? [] : [p1, p2])
+    .filter((p) => p !== null)
+    .map((p) => formatPercent(percent(p), language));
+  const value = `${dayLabel(day, second, language)} ${percents.join(' / ')}`.trim();
   return { label, value, color: style.color };
 }
 
@@ -149,7 +176,7 @@ function redChart(data) {
   const values = data.days
     .map((day) => ({ t: day.date, p: probability(day, COLOR_ROUGE) }))
     .filter((point) => point.p !== null)
-    .map(({ t, p }) => ({ t, red: Math.round(Math.min(Math.max(p, 0), 1) * PERCENT) }));
+    .map(({ t, p }) => ({ t, red: percent(Math.min(Math.max(p, 0), 1)) }));
   if (values.length === 0) {
     return bodyText(NO_FORECAST);
   }
