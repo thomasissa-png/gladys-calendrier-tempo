@@ -15,6 +15,14 @@ la note de la publication GitHub de cette version.
 Même affichage que le site calendrier-tempo.fr et que le composant Home
 Assistant 0.3.1.
 
+> Note du 28/10/2026 : le site ne montre plus d'hésitation entre blanc et
+> bleu. Il donne la couleur la plus probable avec son pourcentage, et ne nomme
+> deux couleurs que quand le rouge est l'une d'elles (« Blanc ou rouge ? 50 % /
+> 45 % », « White or red? 50% / 45% »). L'intégration reprend le champ
+> `libelle` de l'API : elle suit donc cette règle sans mise à jour. Son calcul
+> de secours, utilisé seulement si ces champs manquent, garde la règle
+> décrite ci-dessous.
+
 ### Modifications
 
 - Widget, liste J+2 à J+11 : quand la prévision hésite entre deux couleurs
