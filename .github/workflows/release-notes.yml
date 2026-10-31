@@ -1,0 +1,42 @@
+# -----------------------------------------------------------------------------
+# Refresh the notes of an existing GitHub Release from CHANGELOG.md (main).
+#
+# Manual run only (workflow_dispatch), e.g. to append a dated note to an
+# already published version. The notes are the version's section of
+# CHANGELOG.md on main, extracted by the same script as the release workflows.
+# -----------------------------------------------------------------------------
+name: Release notes
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing release tag (vX.Y.Z)'
+        required: true
+
+jobs:
+  notes:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # edit the Release
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Update the notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "Invalid tag: $TAG"; exit 1; }
+          notes="${RUNNER_TEMP}/notes.md"
+          node .github/scripts/release.mjs notes "${TAG#v}" < CHANGELOG.md > "$notes"
+          test -s "$notes" || { echo "No CHANGELOG.md section for $TAG"; exit 1; }
+          gh release edit "$TAG" --notes-file "$notes"
