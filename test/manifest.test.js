@@ -20,11 +20,11 @@ function minGladysVersion() {
   return match.slice(1).map(Number);
 }
 
-test('type device, catégorie énergie, Gladys 5.1.0 minimum (widgets et scènes)', () => {
+test('type device, catégorie énergie, Gladys 5.3.0 minimum (pays du catalogue ; widgets et scènes dès 5.1.0)', () => {
   assert.equal(manifest.manifest_version, 1);
   assert.equal(manifest.type, 'device');
   assert.deepEqual(manifest.categories, ['energy']);
-  assert.deepEqual(minGladysVersion(), [5, 1, 0]);
+  assert.deepEqual(minGladysVersion(), [5, 3, 0]);
   assert.ok(manifest.name.length >= 3 && manifest.name.length <= 30);
 });
 
@@ -101,4 +101,13 @@ test('licence MIT au nom de Calendrier Tempo EDF', async () => {
   assert.equal(pkg.license, 'MIT');
   assert.equal(pkg.author, 'Calendrier Tempo EDF');
   assert.match(await read('LICENSE'), /Copyright \(c\) 2026 Calendrier Tempo EDF/);
+});
+
+test('the catalog countries: France, which needs Gladys >= 5.3.0', () => {
+  assert.deepEqual(manifest.countries, ['FR']);
+  const [major, minor] = manifest.gladys_version
+    .match(/>=\s*(\d+)\.(\d+)/)
+    .slice(1)
+    .map(Number);
+  assert.ok(major > 5 || (major === 5 && minor >= 3), 'countries needs Gladys 5.3.0');
 });

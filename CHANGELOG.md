@@ -10,6 +10,12 @@ la note de la publication GitHub de cette version.
 
 ## [Unreleased]
 
+### Changed
+
+- Declared for France only (`countries: ["FR"]`): the Gladys catalog of an
+  instance located elsewhere no longer lists it in its browse views (the
+  search still finds it). Requires Gladys 5.3.0 or later.
+
 ## [0.3.0] - 2026-10-26
 
 Même affichage que le site calendrier-tempo.fr et que le composant Home

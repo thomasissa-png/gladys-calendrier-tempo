@@ -6,7 +6,7 @@ Les données viennent de l'[API publique et gratuite de calendrier-tempo.fr](htt
 
 ## Prérequis
 
-- Gladys Assistant 5.1 ou plus récent.
+- Gladys Assistant 5.3 ou plus récent.
 - Un accès à Internet depuis votre Gladys.
 
 ## Mise en route
