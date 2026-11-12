@@ -6,7 +6,7 @@ Data comes from the [free public API of calendrier-tempo.fr](https://www.calendr
 
 ## Requirements
 
-- Gladys Assistant 5.1 or later.
+- Gladys Assistant 5.3 or later.
 - Internet access from your Gladys.
 
 ## Getting started

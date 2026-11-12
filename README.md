@@ -22,7 +22,7 @@ Les taux de réussite, calculés sur les prévisions réellement émises, sont p
 
 ## Installation
 
-Version minimale : Gladys Assistant 5.1.
+Version minimale : Gladys Assistant 5.3.
 
 1. Dans Gladys, ouvrez **Intégrations**, cherchez **Calendrier Tempo EDF** dans le catalogue et cliquez sur **Installer**. Vous pouvez aussi installer l'intégration depuis l'adresse de ce dépôt : `https://github.com/thomasissa-png/gladys-calendrier-tempo`.
 2. Une fois l'intégration démarrée, ouvrez son onglet **Découverte** et créez l'appareil **Calendrier Tempo EDF**. L'intégration ne crée jamais d'appareil seule.
@@ -118,7 +118,7 @@ Gladys Assistant integration for the French **EDF Tempo** electricity tariff, wi
 
 Reliability: `officielle` = color published by EDF, the only authoritative one; `fiable` = D+2 to D+5, the range where the site measures its performance, the most reliable one; `indicative` = D+6 to D+15, a trend rather than a certainty. Success rates are published on the [methodology page](https://www.calendrier-tempo.fr/methodologie), not in this integration.
 
-Data comes from the free public API of [calendrier-tempo.fr](https://www.calendrier-tempo.fr/api-tempo) (no account, no key). Requires Gladys Assistant 5.1 or later. Colors are `bleu` (blue), `blanc` (white), `rouge` (red) and `inconnue` (unknown). Updates every 30 minutes, at 0:05 and at 11:35 (Paris time, plus a fixed random delay of 0 to 120 seconds per installation), with a single retry 5 minutes after a failure. It does not write to the Gladys `tempo` tariff calendar. Not affiliated with EDF or RTE.
+Data comes from the free public API of [calendrier-tempo.fr](https://www.calendrier-tempo.fr/api-tempo) (no account, no key). Requires Gladys Assistant 5.3 or later. Colors are `bleu` (blue), `blanc` (white), `rouge` (red) and `inconnue` (unknown). Updates every 30 minutes, at 0:05 and at 11:35 (Paris time, plus a fixed random delay of 0 to 120 seconds per installation), with a single retry 5 minutes after a failure. It does not write to the Gladys `tempo` tariff calendar. Not affiliated with EDF or RTE.
 
 ## Licence
 
